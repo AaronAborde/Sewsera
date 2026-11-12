@@ -27,6 +27,7 @@ interface FabricOrder {
   id: string;
   fabricName?: string;
   customerName?: string;
+  buyerRole?: string;
   quantity?: number;
   total?: number;
   color?: string;
@@ -141,7 +142,12 @@ export default function Orders() {
                     </div>
                     <p className="text-sm" style={{ color: C.dark }}>{o.fabricName || 'Fabric order'}</p>
                     <p className="text-xs text-gray-400">
-                      {o.customerName || 'Customer'} · {o.quantity ?? 0}m
+                      {o.customerName || 'Buyer'} · {o.quantity ?? 0}m
+                      {o.buyerRole === 'tailor' && (
+                        <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px]" style={{ background: '#E8F8F6', color: C.teal }}>
+                          Tailor
+                        </span>
+                      )}
                     </p>
                   </div>
                   <div className="text-right">

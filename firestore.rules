@@ -171,9 +171,11 @@ service cloud.firestore {
     }
     // "checkouts" has no rules on purpose: only the payment server can read / write it.
 
-    // Fabric orders placed from the fabric detail page (client-created).
+    // Fabric orders are placed by tailors sourcing fabric from sellers.
     match /fabricOrders/{id} {
-      allow create: if signedIn() && request.resource.data.customerId == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.customerId == request.auth.uid
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'tailor';
       allow read: if isAdmin()
         || (signedIn()
           && (resource.data.customerId == request.auth.uid || resource.data.sellerId == request.auth.uid));

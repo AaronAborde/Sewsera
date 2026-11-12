@@ -184,10 +184,10 @@ export default function Landing() {
               Source the Finest Filipino Fabrics
             </h2>
             <p className="text-gray-500 text-sm leading-relaxed mb-6">
-              From traditional Piña and Jusi to premium Italian silk blends — discover an extensive catalog of fabrics from verified sellers across Metro Manila.
+              From traditional Piña and Jusi to premium Italian silk blends — tailors can source fabrics from verified sellers across Metro Manila.
             </p>
             <button onClick={() => navigate('/onboarding')} className="flex items-center gap-2 px-6 py-3 rounded-xl text-white text-sm hover:opacity-90 transition-opacity" style={{ background: C.teal }}>
-              Browse Fabrics <ArrowRight size={16} />
+              Join as a Tailor <ArrowRight size={16} />
             </button>
           </div>
           <div className="rounded-2xl overflow-hidden shadow-lg h-72 md:h-80">

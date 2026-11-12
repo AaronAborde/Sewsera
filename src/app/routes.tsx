@@ -8,7 +8,6 @@ import CustomerHome from './pages/customer/CustomerHome';
 import Discover from './pages/customer/Discover';
 import MapPage from './pages/customer/MapPage';
 import TailorProfile from './pages/customer/TailorProfile';
-import FabricDetail from './pages/customer/FabricDetail';
 import Booking from './pages/customer/Booking';
 import CustomerOrders from './pages/customer/Projects';
 import Messages from './pages/shared/Messages';
@@ -16,6 +15,8 @@ import Profile from './pages/shared/Profile';
 import SetLocationPage from './pages/shared/SetLocationPage';
 import TailorDashboard from './pages/tailor/TailorDashboard';
 import Jobs from './pages/tailor/Jobs';
+import Fabrics from './pages/tailor/Fabrics';
+import FabricDetail from './pages/tailor/FabricDetail';
 import Schedule from './pages/tailor/Schedule';
 import Portfolio from './pages/tailor/Portfolio';
 import SellerDashboard from './pages/seller/SellerDashboard';
@@ -38,7 +39,6 @@ export const router = createBrowserRouter([
   { path: '/customer/discover', Component: Discover },
   { path: '/customer/map', Component: MapPage },
   { path: '/customer/tailor/:id', Component: TailorProfile },
-  { path: '/customer/fabric/:id', Component: FabricDetail },
   { path: '/customer/booking', Component: Booking },
   { path: '/customer/orders', Component: CustomerOrders },
   { path: '/customer/projects', element: <Navigate to="/customer/orders" replace /> },
@@ -48,6 +48,8 @@ export const router = createBrowserRouter([
   // Tailor Routes
   { path: '/tailor', Component: TailorDashboard },
   { path: '/tailor/jobs', Component: Jobs },
+  { path: '/tailor/fabrics', Component: Fabrics },
+  { path: '/tailor/fabric/:id', Component: FabricDetail },
   { path: '/tailor/schedule', Component: Schedule },
   { path: '/tailor/portfolio', Component: Portfolio },
   { path: '/tailor/location', element: <SetLocationPage collectionName="tailors" /> },
