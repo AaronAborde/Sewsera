@@ -260,7 +260,6 @@ export default function Profile() {
               onClick={() => coverRef.current?.click()}
               disabled={coverBusy}
               aria-label="Change cover photo"
-              title="Change cover photo"
               className="absolute top-3 right-3 p-1.5 rounded-lg bg-white/20 text-white hover:bg-white/30 transition-colors disabled:opacity-50"
             >
               <Edit2 size={14} />
@@ -296,23 +295,25 @@ export default function Profile() {
                 </button>
               </div>
               <div className="mb-1">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xl" style={{ color: C.dark }}>{currentUser?.name || 'User'}</h2>
-                  {!editing && (
-                    <button
-                      onClick={startEdit}
-                      aria-label="Edit profile info"
-                      title="Edit profile info"
-                      className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-                    >
-                      <Edit2 size={14} />
-                    </button>
-                  )}
-                </div>
+                <h2 className="text-xl" style={{ color: C.dark }}>{currentUser?.name || 'User'}</h2>
                 <span className="text-xs px-2 py-0.5 rounded-full text-white" style={{ background: roleColor }}>
                   {roleLabel}
                 </span>
               </div>
+            </div>
+
+            <div className="flex items-center justify-between mt-1 pt-3 border-t border-gray-50">
+              <p className="text-xs uppercase tracking-wide text-gray-400">Contact info</p>
+              {!editing && (
+                <button
+                  onClick={startEdit}
+                  aria-label="Edit contact info"
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg transition-colors hover:opacity-80"
+                  style={{ background: '#FDF5F2', color: C.primary }}
+                >
+                  <Edit2 size={12} /> Edit
+                </button>
+              )}
             </div>
 
             {editing ? (
