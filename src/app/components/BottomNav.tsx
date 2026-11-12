@@ -31,8 +31,8 @@ export function BottomNav() {
     { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/seller' },
     { label: 'Orders', icon: <ClipboardList size={20} />, path: '/seller/orders' },
     { label: 'Inventory', icon: <Package size={20} />, path: '/seller/inventory' },
-    { label: 'Shop', icon: <Store size={20} />, path: '/seller/shop' },
     { label: 'Messages', icon: <MessageSquare size={20} />, path: '/seller/messages' },
+    { label: 'Shop', icon: <Store size={20} />, path: '/seller/shop' },
   ];
 
   const adminItems: NavItem[] = [

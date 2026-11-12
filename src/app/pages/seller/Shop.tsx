@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Camera, Save, MapPin, Phone, Clock, Globe } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Save, MapPin, Phone, Clock, Globe } from 'lucide-react';
 import { Layout } from '../../components/Layout';
 import { useApp } from '../../context/AppContext';
 import { db } from '../../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
-const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', bg: '#F5F0E8' };
+const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F' };
 
 interface ShopData {
   shopName: string;
@@ -27,28 +27,30 @@ export default function Shop() {
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [rating, setRating] = useState(0);
 
   useEffect(() => {
     if (!currentUser?.uid) return;
     const loadShop = async () => {
       try {
-        const shopRef = doc(db, 'shops', currentUser.uid);
-        const shopSnap = await getDoc(shopRef);
+        const [shopSnap, sellerSnap] = await Promise.all([
+          getDoc(doc(db, 'shops', currentUser.uid)),
+          getDoc(doc(db, 'sellers', currentUser.uid)),
+        ]);
+        if (sellerSnap.exists()) {
+          setRating(Number(sellerSnap.data().rating) || 0);
+        }
         if (shopSnap.exists()) {
           const data = shopSnap.data() as ShopData;
-          setShopName(data.shopName);
-          setDescription(data.description);
-          setAddress(data.address);
-          setPhone(data.phone);
-          setHours(data.hours);
+          setShopName(data.shopName || '');
+          setDescription(data.description || '');
+          setAddress(data.address || '');
+          setPhone(data.phone || '');
+          setHours(data.hours || '');
           setWebsite(data.website || '');
         } else {
-          setShopName('My Fabric Shop');
-          setDescription('Quality fabrics for tailors and designers.');
-          setAddress('Manila, Philippines');
+          setShopName(currentUser?.name ? `${currentUser.name}'s Shop` : '');
           setPhone(currentUser?.phone || '');
-          setHours('Mon–Sat: 9:00 AM – 6:00 PM');
-          setWebsite('');
         }
       } catch (error) {
         console.error("Error loading shop:", error);
@@ -71,7 +73,7 @@ export default function Shop() {
         hours,
         website,
         updatedAt: new Date(),
-      });
+      }, { merge: true });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
@@ -95,11 +97,7 @@ export default function Shop() {
     <Layout title="Shop Profile">
       <div className="max-w-xl mx-auto md:max-w-2xl px-4 md:px-8 py-5">
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-5">
-          <div className="h-32 relative" style={{ background: `linear-gradient(135deg, ${C.dark} 0%, ${C.teal} 100%)` }}>
-            <button className="absolute top-3 right-3 px-3 py-1.5 rounded-lg bg-white/20 text-white text-xs flex items-center gap-1.5 hover:bg-white/30 transition-colors">
-              <Camera size={12} /> Change Cover
-            </button>
-          </div>
+          <div className="h-32" style={{ background: `linear-gradient(135deg, ${C.dark} 0%, ${C.teal} 100%)` }} />
           <div className="px-5 pb-5">
             <div className="flex items-end gap-4 -mt-8 mb-3">
               <div className="w-16 h-16 rounded-2xl border-4 border-white flex items-center justify-center text-white" style={{ background: C.dark }}>
@@ -114,7 +112,7 @@ export default function Shop() {
                 <div className="w-1.5 h-1.5 rounded-full bg-green-500" /> Verified Seller
               </div>
               <div className="px-2.5 py-1 rounded-full text-xs" style={{ background: '#FDF5F2', color: C.primary }}>
-                4.8★ Rating
+                {rating > 0 ? `${rating.toFixed(1)}★ Rating` : 'No ratings yet'}
               </div>
             </div>
           </div>

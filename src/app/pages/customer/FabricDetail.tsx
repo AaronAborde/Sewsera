@@ -1,7 +1,7 @@
 // src/app/pages/customer/FabricDetail.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ArrowLeft, Star, MapPin, ShoppingCart, Minus, Plus, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Star, MapPin, ShoppingCart, Minus, Plus, CheckCircle, MessageSquare } from 'lucide-react';
 import { PaymentModal } from '../../components/PaymentModal';
 import { useApp } from '../../context/AppContext';
 import { db } from '../../firebase';
@@ -208,6 +208,18 @@ export default function FabricDetail() {
             </div>
           </div>
         </div>
+
+        {fabric.sellerId && (
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => navigate(`/customer/messages?to=${fabric.sellerId}&name=${encodeURIComponent(fabric.seller)}&role=seller`)}
+              className="flex items-center gap-2 px-4 py-3 rounded-xl border border-gray-200 text-sm transition-colors hover:bg-gray-50"
+              style={{ color: C.dark }}
+            >
+              <MessageSquare size={16} /> Message Seller
+            </button>
+          </div>
+        )}
 
         <button
           onClick={() => setPaymentOpen(true)}

@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router';
+import { createBrowserRouter, Navigate } from 'react-router';
 import Landing from './pages/Landing';
 import Onboarding from './pages/Onboarding';
 import Login from './pages/auth/Login';
@@ -58,7 +58,7 @@ export const router = createBrowserRouter([
   { path: '/seller/shop', Component: Shop },
   { path: '/seller/location', element: <SetLocationPage collectionName="sellers" /> },
   { path: '/seller/messages', Component: Messages },
-  { path: '/seller/profile', Component: Profile },
+  { path: '/seller/profile', element: <Navigate to="/seller/shop" replace /> },
 
   // Admin Routes
   { path: '/admin', Component: AdminOverview },

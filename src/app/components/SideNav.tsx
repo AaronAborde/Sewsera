@@ -39,9 +39,7 @@ export function SideNav() {
     { label: 'Dashboard', icon: <LayoutDashboard size={18} />, path: '/seller' },
     { label: 'Orders', icon: <ClipboardList size={18} />, path: '/seller/orders' },
     { label: 'Inventory', icon: <Package size={18} />, path: '/seller/inventory' },
-    { label: 'Shop Profile', icon: <Store size={18} />, path: '/seller/shop' },
     { label: 'Messages', icon: <MessageSquare size={18} />, path: '/seller/messages' },
-    { label: 'Profile', icon: <User size={18} />, path: '/seller/profile' },
   ];
 
   const adminItems: NavItem[] = [
@@ -130,7 +128,21 @@ export function SideNav() {
       </nav>
 
       {/* Logout */}
-      <div className="p-3 border-t border-white/10">
+      <div className="p-3 border-t border-white/10 space-y-0.5">
+        {userRole === 'seller' && (
+          <button
+            onClick={() => navigate('/seller/shop')}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all"
+            style={{
+              background: location.pathname === '/seller/shop' ? C.primary : 'transparent',
+              color: location.pathname === '/seller/shop' ? 'white' : 'rgba(255,255,255,0.6)',
+            }}
+          >
+            <Store size={18} />
+            <span className="text-sm">Shop Profile</span>
+            {location.pathname === '/seller/shop' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white/60" />}
+          </button>
+        )}
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all hover:bg-white/10"

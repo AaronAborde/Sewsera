@@ -3,9 +3,9 @@ import { Package, Truck, CheckCircle, Clock, ChevronRight } from 'lucide-react';
 import { Layout } from '../../components/Layout';
 import { useApp } from '../../context/AppContext';
 import { db } from '../../firebase';
-import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc, Timestamp } from 'firebase/firestore';
 
-const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', bg: '#F5F0E8' };
+const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F' };
 
 const PIPELINE = [
   { status: 'pending', label: 'Pending', color: '#F59E0B', bg: '#FFFBEB' },
@@ -14,7 +14,6 @@ const PIPELINE = [
   { status: 'delivered', label: 'Delivered', color: '#10B981', bg: '#ECFDF5' },
 ];
 
-// ✅ FIXED: Use React.ReactNode instead of JSX.Element
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   pending: <Clock size={10} />,
   processing: <Package size={10} />,
@@ -24,33 +23,41 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 
 const STATUS_ORDER = ['pending', 'processing', 'shipped', 'delivered'];
 
-interface Order {
+interface FabricOrder {
   id: string;
-  product: string;
-  customer: string;
-  quantity: number;
-  total: number;
-  status: string;
-  date: string;
-  address: string;
+  fabricName?: string;
+  customerName?: string;
+  quantity?: number;
+  total?: number;
+  color?: string;
+  status?: string;
+  createdAt?: Timestamp;
 }
+
+const formatDate = (order: FabricOrder) => {
+  const date = order.createdAt?.toDate?.();
+  return date ? date.toLocaleDateString() : '';
+};
 
 export default function Orders() {
   const { currentUser } = useApp();
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<FabricOrder[]>([]);
   const [filter, setFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!currentUser?.uid) return;
     const fetchOrders = async () => {
       try {
-        const q = query(collection(db, 'orders'), where('sellerId', '==', currentUser.uid));
+        const q = query(collection(db, 'fabricOrders'), where('sellerId', '==', currentUser.uid));
         const snapshot = await getDocs(q);
-        const ordersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+        const ordersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FabricOrder));
+        ordersList.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
         setOrders(ordersList);
-      } catch (error) {
-        console.error("Error fetching orders:", error);
+      } catch (e) {
+        console.error('Error fetching orders:', e);
+        setError('Could not load your orders. Please refresh.');
       } finally {
         setLoading(false);
       }
@@ -63,10 +70,11 @@ export default function Orders() {
     if (idx >= STATUS_ORDER.length - 1) return;
     const newStatus = STATUS_ORDER[idx + 1];
     try {
-      await updateDoc(doc(db, 'orders', id), { status: newStatus });
+      await updateDoc(doc(db, 'fabricOrders', id), { status: newStatus });
       setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
-    } catch (error) {
-      console.error("Error updating order status:", error);
+    } catch (e) {
+      console.error('Error updating order status:', e);
+      setError('Could not update the order. Please try again.');
     }
   };
 
@@ -91,6 +99,10 @@ export default function Orders() {
   return (
     <Layout title="Orders">
       <div className="max-w-xl mx-auto md:max-w-3xl px-4 md:px-8 py-5">
+        {error && (
+          <div className="bg-red-50 border border-red-100 rounded-2xl p-3.5 mb-5 text-xs text-red-600">{error}</div>
+        )}
+
         <div className="grid grid-cols-4 gap-2 mb-5">
           {PIPELINE.map(p => (
             <button
@@ -112,8 +124,8 @@ export default function Orders() {
         <div className="space-y-3">
           <p className="text-sm text-gray-500">{filtered.length} orders</p>
           {filtered.map(o => {
-            const cfg = PIPELINE.find(p => p.status === o.status)!;
-            const idx = STATUS_ORDER.indexOf(o.status);
+            const cfg = PIPELINE.find(p => p.status === o.status) || PIPELINE[0];
+            const idx = STATUS_ORDER.indexOf(o.status || 'pending');
             const nextLabel = idx < STATUS_ORDER.length - 1
               ? `Mark as ${STATUS_ORDER[idx + 1].charAt(0).toUpperCase() + STATUS_ORDER[idx + 1].slice(1)}`
               : null;
@@ -123,15 +135,17 @@ export default function Orders() {
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-xs text-gray-400">{o.id}</p>
+                      <p className="text-xs text-gray-300">#{o.id.slice(0, 8)}</p>
                       <span className="text-xs text-gray-300">·</span>
-                      <p className="text-xs text-gray-400">{o.date}</p>
+                      <p className="text-xs text-gray-400">{formatDate(o)}</p>
                     </div>
-                    <p className="text-sm" style={{ color: C.dark }}>{o.product}</p>
-                    <p className="text-xs text-gray-400">{o.customer} · {o.quantity}</p>
+                    <p className="text-sm" style={{ color: C.dark }}>{o.fabricName || 'Fabric order'}</p>
+                    <p className="text-xs text-gray-400">
+                      {o.customerName || 'Customer'} · {o.quantity ?? 0}m
+                    </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm" style={{ color: C.primary }}>₱{o.total.toLocaleString()}</p>
+                    <p className="text-sm" style={{ color: C.primary }}>₱{(Number(o.total) || 0).toLocaleString()}</p>
                     <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: cfg.bg, color: cfg.color }}>
                       {cfg.label}
                     </span>
@@ -140,7 +154,7 @@ export default function Orders() {
 
                 <div className="flex items-center gap-1 mb-3">
                   {PIPELINE.map((p, i) => {
-                    const isReached = STATUS_ORDER.indexOf(o.status) >= i;
+                    const isReached = STATUS_ORDER.indexOf(o.status || 'pending') >= i;
                     return (
                       <div key={p.status} className="flex items-center flex-1">
                         <div
@@ -150,20 +164,22 @@ export default function Orders() {
                           {STATUS_ICONS[p.status]}
                         </div>
                         {i < PIPELINE.length - 1 && (
-                          <div className="flex-1 h-0.5 mx-0.5" style={{ background: STATUS_ORDER.indexOf(o.status) > i ? p.color : '#E5E7EB' }} />
+                          <div className="flex-1 h-0.5 mx-0.5" style={{ background: STATUS_ORDER.indexOf(o.status || 'pending') > i ? p.color : '#E5E7EB' }} />
                         )}
                       </div>
                     );
                   })}
                 </div>
 
-                <p className="text-xs text-gray-400 mb-3">
-                  <span className="text-gray-500">Ship to:</span> {o.address}
-                </p>
+                {o.color && (
+                  <p className="text-xs text-gray-400 mb-3">
+                    <span className="text-gray-500">Color:</span> {o.color}
+                  </p>
+                )}
 
                 {nextLabel && (
                   <button
-                    onClick={() => advanceStatus(o.id, o.status)}
+                    onClick={() => advanceStatus(o.id, o.status || 'pending')}
                     className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl text-white hover:opacity-90 transition-opacity"
                     style={{ background: cfg.color }}
                   >

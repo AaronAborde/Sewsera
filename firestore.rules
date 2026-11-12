@@ -145,6 +145,10 @@ service cloud.firestore {
         || (signedIn()
           && (resource.data.customerId == request.auth.uid || resource.data.sellerId == request.auth.uid));
       allow update, delete: if isAdmin();
+      // the seller moves their own fabric order along the delivery pipeline
+      allow update: if signedIn()
+        && resource.data.sellerId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
     }
 
     match /fabrics/{path=**}       { allow read, write: if signedIn(); }

@@ -181,7 +181,7 @@ export default function TailorProfile() {
       {/* Bottom CTA */}
       <div className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-100 p-4 flex gap-3 md:max-w-xl md:mx-auto">
         <button
-          onClick={() => navigate('/customer/messages')}
+          onClick={() => navigate(`/customer/messages?to=${tailor.id}&name=${encodeURIComponent(tailor.name)}&role=tailor`)}
           className="flex items-center gap-2 px-4 py-3 rounded-xl border border-gray-200 text-sm transition-colors hover:bg-gray-50"
           style={{ color: C.dark }}
         >
