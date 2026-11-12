@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { Bell, User, Scissors } from 'lucide-react';
 import { SideNav } from './SideNav';
 import { BottomNav } from './BottomNav';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { useApp } from '../context/AppContext';
 
 const C = { primary: '#C4623F', dark: '#1A2B3C', bg: '#F5F0E8' };
@@ -42,8 +43,13 @@ export function Layout({ children, title, showHeader = true }: LayoutProps) {
                   <Bell size={18} style={{ color: C.dark }} />
                   <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full" style={{ background: C.primary }} />
                 </button>
-                <button onClick={() => navigate(profilePath)} className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs" style={{ background: C.primary }}>
-                  {currentUser?.avatar || <User size={14} />}
+                <button onClick={() => navigate(profilePath)} className="w-8 h-8 rounded-full" aria-label="Open profile">
+                  <Avatar className="w-8 h-8">
+                    {currentUser?.avatarUrl && <AvatarImage src={currentUser.avatarUrl} alt="" />}
+                    <AvatarFallback className="text-white text-xs" style={{ background: C.primary }}>
+                      {currentUser?.name?.slice(0, 2).toUpperCase() || <User size={14} />}
+                    </AvatarFallback>
+                  </Avatar>
                 </button>
               </div>
             </div>
@@ -62,9 +68,12 @@ export function Layout({ children, title, showHeader = true }: LayoutProps) {
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full" style={{ background: C.primary }} />
               </button>
               <button onClick={() => navigate(profilePath)} className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:bg-gray-50 transition-colors">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs" style={{ background: C.primary }}>
-                  {currentUser?.avatar}
-                </div>
+                <Avatar className="w-8 h-8">
+                  {currentUser?.avatarUrl && <AvatarImage src={currentUser.avatarUrl} alt="" />}
+                  <AvatarFallback className="text-white text-xs" style={{ background: C.primary }}>
+                    {currentUser?.name?.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
                 <span className="text-sm" style={{ color: C.dark }}>{currentUser?.name}</span>
               </button>
             </div>

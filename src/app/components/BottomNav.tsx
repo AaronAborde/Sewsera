@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router';
-import { Home, Search, Map, FolderOpen, MessageSquare, LayoutDashboard, Briefcase, CalendarDays, Image, ShoppingBag, ClipboardList, Package, Store } from 'lucide-react';
+import { Home, Search, Map, FolderOpen, MessageSquare, LayoutDashboard, Briefcase, CalendarDays, Image, ClipboardList, Package, Store, Users, User } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F' };
@@ -35,7 +35,14 @@ export function BottomNav() {
     { label: 'Messages', icon: <MessageSquare size={20} />, path: '/seller/messages' },
   ];
 
-  const items = userRole === 'customer' ? customerItems : userRole === 'tailor' ? tailorItems : sellerItems;
+  const adminItems: NavItem[] = [
+    { label: 'Overview', icon: <LayoutDashboard size={20} />, path: '/admin' },
+    { label: 'Users', icon: <Users size={20} />, path: '/admin/users' },
+    { label: 'Orders', icon: <ClipboardList size={20} />, path: '/admin/orders' },
+    { label: 'Profile', icon: <User size={20} />, path: '/admin/profile' },
+  ];
+
+  const items = userRole === 'customer' ? customerItems : userRole === 'tailor' ? tailorItems : userRole === 'admin' ? adminItems : sellerItems;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-100 md:hidden safe-area-pb">

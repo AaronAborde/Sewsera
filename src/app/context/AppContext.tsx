@@ -1,10 +1,10 @@
 // src/app/context/AppContext.tsx
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { auth, db } from '../firebase';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
-export type UserRole = 'customer' | 'tailor' | 'seller';
+export type UserRole = 'customer' | 'tailor' | 'seller' | 'admin';
 
 export interface User {
   uid: string;
@@ -48,7 +48,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       if (firebaseUser) {
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
         if (userDoc.exists()) {
-          const userData = userDoc.data() as User;
+          const userData = userDoc.data() as User & { status?: string };
+          // Pending / rejected vendors must not enter the app until an admin approves them.
+          const awaitingApproval =
+            (userData.role === 'tailor' || userData.role === 'seller') && (userData.status || 'pending') !== 'approved';
+          if (awaitingApproval) {
+            await signOut(auth);
+            return;
+          }
           setCurrentUser(userData);
           setUserRole(userData.role);
           setIsAuthenticated(true);

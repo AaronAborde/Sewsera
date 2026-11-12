@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Scissors, Eye, EyeOff, ArrowLeft, Loader2, CheckCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { auth, db } from '../../firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import type { UserRole } from '../../context/AppContext';
@@ -45,14 +45,19 @@ export default function Signup() {
         email,
         phone,
         role,
+        status: role === 'customer' ? 'approved' : 'pending',
         createdAt: new Date(),
       });
+      // Vendors wait for admin approval, so don't keep them signed in.
+      if (role !== 'customer') await signOut(auth);
       setSuccess(true);
-      setTimeout(() => {
-        setIsAuthenticated(true);
-        setUserRole(role);
-        navigate(`/${role}`);
-      }, 1500);
+      if (role === 'customer') {
+        setTimeout(() => {
+          setIsAuthenticated(true);
+          setUserRole(role);
+          navigate(`/${role}`);
+        }, 1500);
+      }
     } catch (err: any) {
       console.error(err);
       if (err.code === 'auth/email-already-in-use') {
@@ -72,7 +77,16 @@ export default function Signup() {
             <CheckCircle size={40} className="text-green-500" />
           </div>
           <h2 className="text-2xl mb-2" style={{ color: C.dark, fontFamily: "'Playfair Display', serif" }}>Welcome to SewsEra!</h2>
-          <p className="text-sm text-gray-500">Setting up your account...</p>
+          <p className="text-sm text-gray-500">
+            {role === 'customer'
+              ? 'Setting up your account...'
+              : 'Your account is pending admin approval. You can sign in once a SewsEra admin reviews your documents.'}
+          </p>
+          {role !== 'customer' && (
+            <button onClick={() => navigate('/auth/login')} className="mt-5 px-4 py-2.5 rounded-xl text-white text-sm" style={{ background: C.primary }}>
+              Back to sign in
+            </button>
+          )}
         </div>
       </div>
     );

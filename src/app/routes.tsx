@@ -20,6 +20,9 @@ import SellerDashboard from './pages/seller/SellerDashboard';
 import Orders from './pages/seller/Orders';
 import Inventory from './pages/seller/Inventory';
 import Shop from './pages/seller/Shop';
+import AdminOverview from './pages/admin/AdminOverview';
+import AdminUsers from './pages/admin/AdminUsers';
+import AdminOrders from './pages/admin/AdminOrders';
 
 export const router = createBrowserRouter([
   { path: '/', Component: Landing },
@@ -53,6 +56,12 @@ export const router = createBrowserRouter([
   { path: '/seller/shop', Component: Shop },
   { path: '/seller/messages', Component: Messages },
   { path: '/seller/profile', Component: Profile },
+
+  // Admin Routes
+  { path: '/admin', Component: AdminOverview },
+  { path: '/admin/users', Component: AdminUsers },
+  { path: '/admin/orders', Component: AdminOrders },
+  { path: '/admin/profile', Component: Profile },
 
   // Fallback
   { path: '*', Component: Landing },

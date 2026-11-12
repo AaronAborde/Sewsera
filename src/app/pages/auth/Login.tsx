@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Scissors, Eye, EyeOff, ArrowLeft, Loader2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithPopup, signOut } from 'firebase/auth';
 import { auth, db, googleProvider } from '../../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import type { UserRole } from '../../context/AppContext';
@@ -24,6 +24,7 @@ export default function Login() {
     const userRef = doc(db, 'users', uid);
     const userSnap = await getDoc(userRef);
     let role: UserRole = 'customer';
+    let status = 'approved';
     
     if (!userSnap.exists()) {
       // FORCE create a document for Google/email login if missing
@@ -32,10 +33,24 @@ export default function Login() {
         email: email || '',
         name: displayName || '',
         role: 'customer',
+        status: 'approved',
         createdAt: new Date(),
       });
     } else {
-      role = userSnap.data().role as UserRole;
+      const data = userSnap.data();
+      role = data.role as UserRole;
+      status = data.status || (role === 'tailor' || role === 'seller' ? 'pending' : 'approved');
+    }
+
+    // Tailors / sellers only get in after an admin approves their documents.
+    if ((role === 'tailor' || role === 'seller') && status !== 'approved') {
+      await signOut(auth);
+      setError(
+        status === 'rejected'
+          ? 'Your application was not approved. Please contact SewsEra support.'
+          : 'Your account is awaiting admin approval. Please try again once approved.',
+      );
+      return;
     }
     
     setUserRole(role);
