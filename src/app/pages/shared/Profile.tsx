@@ -74,7 +74,7 @@ export default function Profile() {
   };
 
   const roleColor = userRole === 'customer' ? C.teal : userRole === 'tailor' ? C.primary : C.dark;
-  const roleLabel = userRole === 'customer' ? 'Customer' : userRole === 'tailor' ? 'Professional Tailor' : 'Fabric Seller';
+  const roleLabel = userRole === 'customer' ? 'Customer' : userRole === 'tailor' ? 'Professional Tailor' : userRole === 'admin' ? 'Administrator' : 'Fabric Seller';
 
   if (loading) {
     return (

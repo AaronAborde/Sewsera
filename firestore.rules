@@ -1,0 +1,145 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ---------------------------------------------------------------
+    // USERS
+    // ---------------------------------------------------------------
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+
+      // Self-registration: only customer / tailor / seller.
+      // Customers start "approved"; tailors and sellers MUST start "pending".
+      allow create: if signedIn() && request.auth.uid == uid
+        && (
+          (request.resource.data.role == 'customer' && request.resource.data.status == 'approved')
+          || (request.resource.data.role in ['tailor', 'seller'] && request.resource.data.status == 'pending')
+        );
+
+      allow update: if isAdmin()
+        || (
+          signedIn() && request.auth.uid == uid
+          // can never change own role
+          && request.resource.data.role == resource.data.role
+          // can only touch these fields
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+               'name', 'phone', 'location', 'avatarUrl', 'notifications', 'emailAlerts',
+               'status', 'documentsSubmitted', 'documentIds', 'submittedAt', 'emailVerified'
+             ])
+          // status: the only allowed change is back to "pending" (resubmitting documents)
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status'])
+            || (
+              request.resource.data.status == 'pending'
+              && resource.data.role in ['tailor', 'seller']
+              && resource.data.get('status', 'pending') in ['pending', 'rejected']
+            )
+          )
+        );
+
+      allow delete: if isAdmin();
+
+      // Uploaded business documents
+      match /documents/{docId} {
+        allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+        allow create, update: if signedIn() && request.auth.uid == uid
+          && get(/databases/$(database)/documents/users/$(uid)).data.role in ['tailor', 'seller']
+          && get(/databases/$(database)/documents/users/$(uid)).data.get('status', 'pending') in ['pending', 'rejected'];
+        allow delete: if false;
+      }
+    }
+
+    // Email OTP codes (only the owner can read / write their own code doc)
+    match /emailOtps/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Public listings: everyone signed in can read; only the admin can create / edit / remove
+    // (the admin dashboard creates them when a tailor / seller is approved)
+    match /tailors/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+      // customers' reviews update the average rating + review count
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'reviews']);
+    }
+
+    // Reviews of tailors / fabrics: one per customer per target (document id is fixed)
+    match /reviews/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1 && request.resource.data.rating <= 5;
+      allow update: if signedIn()
+        && resource.data.customerId == request.auth.uid
+        && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1 && request.resource.data.rating <= 5;
+      allow delete: if signedIn() && (resource.data.customerId == request.auth.uid || isAdmin());
+    }
+
+    // Public numbers for the landing page (readable without login).
+    // Admin writes the exact counts; a new customer may add exactly +1 to "customers".
+    match /stats/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['customers'])
+        && request.resource.data.customers == resource.data.customers + 1;
+    }
+    match /sellers/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------
+    // OTHER COLLECTIONS used by the app.
+    // TEMPORARY: any signed-in user can read/write. Tighten these later
+    // (e.g. only the owner can write their own booking / shop).
+    // ---------------------------------------------------------------
+    match /inventory/{path=**}     { allow read, write: if signedIn(); }
+    match /shops/{path=**}         { allow read, write: if signedIn(); }
+    match /portfolio/{path=**}     { allow read, write: if signedIn(); }
+    match /appointments/{path=**}  { allow read, write: if signedIn(); }
+    match /bookings/{path=**}      { allow read, write: if signedIn(); }
+    match /jobs/{path=**}          { allow read, write: if signedIn(); }
+
+    // Orders are created ONLY by the payment server (Admin SDK) after a verified payment.
+    // The seller can read their orders and change only the status; admins can moderate any order.
+    match /orders/{id} {
+      allow read: if signedIn()
+        && (resource.data.customerId == request.auth.uid
+            || resource.data.sellerId == request.auth.uid
+            || isAdmin());
+      allow create, delete: if false;
+      allow update: if isAdmin()
+        || (signedIn()
+          && resource.data.sellerId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']));
+    }
+    // "checkouts" has no rules on purpose: only the payment server can read / write it.
+
+    // Fabric orders placed from the fabric detail page (client-created).
+    match /fabricOrders/{id} {
+      allow create: if signedIn() && request.resource.data.customerId == request.auth.uid;
+      allow read: if isAdmin()
+        || (signedIn()
+          && (resource.data.customerId == request.auth.uid || resource.data.sellerId == request.auth.uid));
+      allow update, delete: if isAdmin();
+    }
+
+    match /fabrics/{path=**}       { allow read, write: if signedIn(); }
+    match /conversations/{path=**} { allow read, write: if signedIn(); }
+  }
+}

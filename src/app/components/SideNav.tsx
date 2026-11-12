@@ -1,9 +1,12 @@
 import { useNavigate, useLocation } from 'react-router';
 import {
   Home, Search, Map, FolderOpen, MessageSquare, LayoutDashboard, Briefcase,
-  CalendarDays, Image, ClipboardList, Package, Store, User, LogOut, Scissors
+  CalendarDays, Image, ClipboardList, Package, Store, User, Users, LogOut, Scissors
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { signOut } from 'firebase/auth';
+import { auth } from '../firebase';
 
 const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', bg: '#F5F0E8' };
 
@@ -41,12 +44,20 @@ export function SideNav() {
     { label: 'Profile', icon: <User size={18} />, path: '/seller/profile' },
   ];
 
-  const items = userRole === 'customer' ? customerItems : userRole === 'tailor' ? tailorItems : sellerItems;
+  const adminItems: NavItem[] = [
+    { label: 'Overview', icon: <LayoutDashboard size={18} />, path: '/admin' },
+    { label: 'Users', icon: <Users size={18} />, path: '/admin/users' },
+    { label: 'Orders', icon: <ClipboardList size={18} />, path: '/admin/orders' },
+    { label: 'Profile', icon: <User size={18} />, path: '/admin/profile' },
+  ];
+
+  const items = userRole === 'customer' ? customerItems : userRole === 'tailor' ? tailorItems : userRole === 'admin' ? adminItems : sellerItems;
 
   const roleBadgeColor = userRole === 'customer' ? C.teal : userRole === 'tailor' ? C.primary : C.dark;
-  const roleLabel = userRole === 'customer' ? 'Customer' : userRole === 'tailor' ? 'Tailor' : 'Fabric Seller';
+  const roleLabel = userRole === 'customer' ? 'Customer' : userRole === 'tailor' ? 'Tailor' : userRole === 'admin' ? 'Administrator' : 'Fabric Seller';
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOut(auth);
     setIsAuthenticated(false);
     setUserRole(null);
     navigate('/');
@@ -77,7 +88,12 @@ export function SideNav() {
             className="w-10 h-10 rounded-full flex items-center justify-center text-sm text-white"
             style={{ background: roleBadgeColor }}
           >
-            {currentUser?.avatar || '?'}
+            <Avatar className="w-10 h-10">
+              {currentUser?.avatarUrl && <AvatarImage src={currentUser.avatarUrl} alt="" />}
+              <AvatarFallback className="text-white text-sm" style={{ background: roleBadgeColor }}>
+                {currentUser?.name?.slice(0, 2).toUpperCase() || '?'}
+              </AvatarFallback>
+            </Avatar>
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-white text-sm truncate">{currentUser?.name || 'User'}</p>
