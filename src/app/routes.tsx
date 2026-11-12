@@ -12,6 +12,7 @@ import Booking from './pages/customer/Booking';
 import Projects from './pages/customer/Projects';
 import Messages from './pages/shared/Messages';
 import Profile from './pages/shared/Profile';
+import SetLocationPage from './pages/shared/SetLocationPage';
 import TailorDashboard from './pages/tailor/TailorDashboard';
 import Jobs from './pages/tailor/Jobs';
 import Schedule from './pages/tailor/Schedule';
@@ -46,6 +47,7 @@ export const router = createBrowserRouter([
   { path: '/tailor/jobs', Component: Jobs },
   { path: '/tailor/schedule', Component: Schedule },
   { path: '/tailor/portfolio', Component: Portfolio },
+  { path: '/tailor/location', element: <SetLocationPage collectionName="tailors" /> },
   { path: '/tailor/messages', Component: Messages },
   { path: '/tailor/profile', Component: Profile },
 
@@ -54,6 +56,7 @@ export const router = createBrowserRouter([
   { path: '/seller/orders', Component: Orders },
   { path: '/seller/inventory', Component: Inventory },
   { path: '/seller/shop', Component: Shop },
+  { path: '/seller/location', element: <SetLocationPage collectionName="sellers" /> },
   { path: '/seller/messages', Component: Messages },
   { path: '/seller/profile', Component: Profile },
 

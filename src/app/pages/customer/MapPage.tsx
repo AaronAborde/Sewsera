@@ -1,7 +1,7 @@
 // src/app/pages/customer/MapPage.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { MapPin, Scissors, Package, X, Star, Navigation } from 'lucide-react';
+import { Scissors, Package, X, Star, Navigation } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -10,6 +10,13 @@ import { db } from '../../firebase';
 import { collection, getDocs } from 'firebase/firestore';
 
 const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', bg: '#F5F0E8' };
+
+// Victoria, Oriental Mindoro
+const VICTORIA_CENTER: [number, number] = [13.1783, 121.2733];
+const VICTORIA_BOUNDS: [[number, number], [number, number]] = [
+  [13.05, 121.15],
+  [13.30, 121.40],
+];
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -27,11 +34,80 @@ const createCustomIcon = (color: string, emoji: string) =>
     popupAnchor: [0, -38],
   });
 
-type MarkerData = { id: string; name: string; lat: number; lng: number; rating: number; specialty: string; type: 'tailor' | 'seller' };
+type MarkerData = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  rating: number;
+  specialty: string;
+  type: 'tailor' | 'seller';
+  fields: string[];
+};
+
+type Coords = { lat: number; lng: number };
+const NO_COORDS: Coords = { lat: NaN, lng: NaN };
+
+const toNum = (v: any) => (v === null || v === undefined || v === '' ? NaN : Number(v));
+
+const pick = (o: any, keys: string[]) => {
+  for (const k of keys) {
+    if (o && o[k] !== undefined && o[k] !== null && o[k] !== '') return o[k];
+  }
+  return undefined;
+};
+
+// Makatwirang coordinates para sa Pilipinas
+const inPH = (lat: number, lng: number) =>
+  Number.isFinite(lat) && Number.isFinite(lng) && lat > 4 && lat < 22 && lng > 116 && lng < 128;
+
+// Hinahanap ang coordinates kahit saan sa loob ng object (hanggang 3 antas)
+const findCoords = (s: any, depth = 0): Coords => {
+  if (s === null || s === undefined || depth > 3) return NO_COORDS;
+
+  if (Array.isArray(s)) {
+    if (s.length >= 2) {
+      const a = toNum(s[0]);
+      const b = toNum(s[1]);
+      if (inPH(a, b)) return { lat: a, lng: b };
+      if (inPH(b, a)) return { lat: b, lng: a };
+    }
+    return NO_COORDS;
+  }
+
+  if (typeof s === 'string') {
+    const m = s.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+    if (m) {
+      const a = Number(m[1]);
+      const b = Number(m[2]);
+      if (inPH(a, b)) return { lat: a, lng: b };
+      if (inPH(b, a)) return { lat: b, lng: a };
+    }
+    return NO_COORDS;
+  }
+
+  if (typeof s === 'object') {
+    const lat = toNum(pick(s, ['lat', 'latitude', '_lat', 'Latitude', 'Lat']));
+    const lng = toNum(pick(s, ['lng', 'lon', 'long', 'longitude', '_long', 'Longitude', 'Lng']));
+    if (inPH(lat, lng)) return { lat, lng };
+
+    for (const k of Object.keys(s)) {
+      const r = findCoords(s[k], depth + 1);
+      if (Number.isFinite(r.lat)) return r;
+    }
+  }
+
+  return NO_COORDS;
+};
+
+const hasCoords = (m: { lat: number; lng: number }) =>
+  Number.isFinite(m.lat) && Number.isFinite(m.lng);
 
 function FlyToMarker({ position }: { position: [number, number] | null }) {
   const map = useMap();
-  if (position) map.flyTo(position, 15, { duration: 1 });
+  useEffect(() => {
+    if (position) map.flyTo(position, 16, { duration: 1 });
+  }, [position, map]);
   return null;
 }
 
@@ -46,21 +122,49 @@ export default function MapPage() {
   useEffect(() => {
     const fetchMarkers = async () => {
       try {
-        const tailorsSnap = await getDocs(collection(db, 'tailors'));
-        const sellersSnap = await getDocs(collection(db, 'sellers')); // assuming sellers have lat/lng
-        const tailorsList = tailorsSnap.docs.map(doc => ({
-          id: doc.id,
-          type: 'tailor' as const,
-          ...doc.data(),
-        })) as MarkerData[];
-        const sellersList = sellersSnap.docs.map(doc => ({
-          id: doc.id,
-          type: 'seller' as const,
-          ...doc.data(),
-        })) as MarkerData[];
-        setMarkers([...tailorsList, ...sellersList]);
+        const [tailorsSnap, sellersSnap] = await Promise.all([
+          getDocs(collection(db, 'tailors')),
+          getDocs(collection(db, 'sellers')),
+        ]);
+
+        // Kunin din ang 'users' (kung may lokasyon doon). Hindi mag-e-error kung wala.
+        const usersById: Record<string, any> = {};
+        try {
+          const usersSnap = await getDocs(collection(db, 'users'));
+          usersSnap.docs.forEach(d => { usersById[d.id] = d.data(); });
+        } catch {
+          // walang access o walang 'users' collection, okay lang
+        }
+
+        const build = (d: any, type: 'tailor' | 'seller'): MarkerData => {
+          const data = d.data();
+
+          const linkedId = data.uid ?? data.userId ?? data.ownerId ?? data.user_id;
+          let c = findCoords(data);
+          if (!Number.isFinite(c.lat)) c = findCoords(usersById[d.id]);
+          if (!Number.isFinite(c.lat) && linkedId) c = findCoords(usersById[linkedId]);
+
+          return {
+            id: d.id,
+            type,
+            name: data.name ?? data.shopName ?? data.businessName ?? 'Unnamed',
+            specialty: data.specialty ?? data.specialization ?? (type === 'seller' ? 'Fabric Seller' : ''),
+            rating: data.rating ?? 0,
+            lat: c.lat,
+            lng: c.lng,
+            fields: Object.keys(data),
+          };
+        };
+
+        const list = [
+          ...tailorsSnap.docs.map(d => build(d, 'tailor')),
+          ...sellersSnap.docs.map(d => build(d, 'seller')),
+        ];
+
+        console.log('[MAP] markers', list);
+        setMarkers(list);
       } catch (error) {
-        console.error("Error fetching map markers:", error);
+        console.error('Error fetching map markers:', error);
       } finally {
         setLoading(false);
       }
@@ -69,11 +173,14 @@ export default function MapPage() {
   }, []);
 
   const filtered = markers.filter(m => filter === 'all' ? true : filter === 'tailors' ? m.type === 'tailor' : m.type === 'seller');
+  const mappable = filtered.filter(hasCoords);
 
   const handleSelectFromList = (m: MarkerData) => {
     setSelected(m);
-    setFlyTarget([m.lat, m.lng]);
-    setTimeout(() => setFlyTarget(null), 100);
+    if (hasCoords(m)) {
+      setFlyTarget([m.lat, m.lng]);
+      setTimeout(() => setFlyTarget(null), 1500);
+    }
   };
 
   if (loading) {
@@ -97,7 +204,7 @@ export default function MapPage() {
               {f === 'all' ? 'All' : f === 'tailors' ? '✂ Tailors' : '🧵 Sellers'}
             </button>
           ))}
-          <span className="ml-auto text-xs text-gray-400">{filtered.length} locations</span>
+          <span className="ml-auto text-xs text-gray-400">{mappable.length} locations</span>
         </div>
 
         <div className="flex flex-1 overflow-hidden">
@@ -113,10 +220,14 @@ export default function MapPage() {
                   </button>
                 ))}
               </div>
+              <p className="text-xs text-gray-400">{mappable.length} sa {filtered.length} ay may pin sa mapa</p>
             </div>
             <div className="flex-1 overflow-y-auto">
+              {filtered.length === 0 && (
+                <p className="p-4 text-xs text-gray-400">Wala pang naka-register na lokasyon.</p>
+              )}
               {filtered.map(m => (
-                <button key={m.id} onClick={() => handleSelectFromList(m)}
+                <button key={`${m.type}-${m.id}`} onClick={() => handleSelectFromList(m)}
                   className="w-full flex items-center gap-3 p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors text-left"
                   style={{ background: selected?.id === m.id ? '#FDF5F2' : undefined }}>
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white flex-shrink-0"
@@ -126,6 +237,14 @@ export default function MapPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm truncate" style={{ color: C.dark }}>{m.name}</p>
                     <p className="text-xs text-gray-400">{m.specialty}</p>
+                    {!hasCoords(m) && (
+                      <>
+                        <p className="text-xs text-red-400">Walang location pa</p>
+                        <p className="text-[10px] text-gray-400 break-words">
+                          ID: {m.id} · Fields: {(m.fields ?? []).join(', ')}
+                        </p>
+                      </>
+                    )}
                     <div className="flex items-center gap-0.5 mt-0.5">
                       <Star size={10} className="fill-yellow-400 text-yellow-400" />
                       <span className="text-xs text-gray-500">{m.rating}</span>
@@ -137,11 +256,20 @@ export default function MapPage() {
           </div>
 
           <div className="flex-1 relative">
-            <MapContainer center={[14.5995, 120.9842]} zoom={12} className="w-full h-full z-0" zoomControl={false}>
+            <MapContainer
+              center={VICTORIA_CENTER}
+              zoom={13}
+              minZoom={12}
+              maxZoom={18}
+              maxBounds={VICTORIA_BOUNDS}
+              maxBoundsViscosity={1.0}
+              className="w-full h-full z-0"
+              zoomControl={false}
+            >
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' />
               {flyTarget && <FlyToMarker position={flyTarget} />}
-              {filtered.map(m => (
-                <Marker key={m.id} position={[m.lat, m.lng]} icon={createCustomIcon(m.type === 'tailor' ? C.primary : C.teal, m.type === 'tailor' ? '✂' : '🧵')}
+              {mappable.map(m => (
+                <Marker key={`${m.type}-${m.id}`} position={[m.lat, m.lng]} icon={createCustomIcon(m.type === 'tailor' ? C.primary : C.teal, m.type === 'tailor' ? '✂' : '🧵')}
                   eventHandlers={{ click: () => setSelected(m) }}>
                   <Popup>
                     <div style={{ fontFamily: "'Inter', sans-serif", minWidth: 160 }}>
