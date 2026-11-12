@@ -46,6 +46,7 @@ export default function Profile() {
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const [pinned, setPinned] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -58,6 +59,12 @@ export default function Profile() {
           setNotifications(data.notifications !== false);
           setCurrentUser(prev => (prev ? { ...prev, ...data } : null));
         }
+        // Vendors pin their shop on a separate listing doc; show that state here too.
+        if (userRole === 'tailor' || userRole === 'seller') {
+          const listingSnap = await getDoc(doc(db, userRole === 'tailor' ? 'tailors' : 'sellers', currentUser.uid));
+          const listing = listingSnap.data();
+          setPinned(Number.isFinite(Number(listing?.lat)) && Number.isFinite(Number(listing?.lng)));
+        }
       } catch (e) {
         console.error('Error loading profile:', e);
       } finally {
@@ -65,7 +72,7 @@ export default function Profile() {
       }
     };
     loadProfile();
-  }, [currentUser?.uid, setCurrentUser]);
+  }, [currentUser?.uid, userRole, setCurrentUser]);
 
   useEffect(() => {
     setForm({
@@ -292,7 +299,7 @@ export default function Profile() {
                       className="mt-2 flex items-center gap-1.5 text-xs hover:underline"
                       style={{ color: C.primary }}
                     >
-                      <MapPinned size={13} /> Set your shop pin on the map
+                      <MapPinned size={13} /> {pinned ? 'Update shop pin on the map' : 'Set your shop pin on the map'}
                     </button>
                   )}
                 </div>
@@ -319,7 +326,7 @@ export default function Profile() {
                 {[
                   { icon: <Mail size={15} />, label: 'Email', value: currentUser?.email },
                   { icon: <Phone size={15} />, label: 'Phone', value: currentUser?.phone || 'Not provided' },
-                  { icon: <MapPin size={15} />, label: 'Location', value: currentUser?.location || 'Not set' },
+                  { icon: <MapPin size={15} />, label: 'Location', value: currentUser?.location || (pinned ? 'Pinned on map' : 'Not set') },
                 ].map(row => (
                   <div key={row.label} className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-0">
                     <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: C.bg, color: roleColor }}>
@@ -337,7 +344,7 @@ export default function Profile() {
                     className="mt-2 flex items-center gap-1.5 text-xs hover:underline"
                     style={{ color: C.primary }}
                   >
-                    <MapPinned size={13} /> {currentUser?.location ? 'Update shop pin on the map' : 'Set your shop pin on the map'}
+                    <MapPinned size={13} /> {pinned ? 'Update shop pin on the map' : 'Set your shop pin on the map'}
                   </button>
                 )}
               </div>
