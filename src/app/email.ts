@@ -27,6 +27,7 @@ export async function sendOtpEmail(toEmail: string, toName: string, code: string
     }),
   });
   if (!res.ok) {
-    throw new Error((await res.text()) || 'The email service rejected the request.');
+    console.error('EmailJS send failed:', await res.text());
+    throw new Error('Could not send the verification email. Please try again.');
   }
 }

@@ -135,7 +135,7 @@ export default function VerifyOtp() {
   return (
     <div className="min-h-screen flex items-center justify-center px-6" style={{ background: C.bg, fontFamily: "'Inter', sans-serif" }}>
       <div className="w-full max-w-sm">
-        <button onClick={() => navigate('/auth/login')} className="flex items-center gap-1.5 text-sm text-gray-500 mb-8 hover:text-gray-700 transition-colors">
+        <button onClick={async () => { await signOut(auth); navigate('/auth/login', { replace: true }); }} className="flex items-center gap-1.5 text-sm text-gray-500 mb-8 hover:text-gray-700 transition-colors">
           <ArrowLeft size={15} /> Back to sign in
         </button>
 

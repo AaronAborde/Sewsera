@@ -8,7 +8,7 @@ const MAX_ATTEMPTS = 5;
 export type OtpResult = 'ok' | 'missing' | 'expired' | 'invalid' | 'locked';
 
 export function generateOtp() {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000));
 }
 
 async function hashOtp(uid: string, code: string) {

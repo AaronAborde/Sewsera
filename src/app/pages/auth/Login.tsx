@@ -20,7 +20,7 @@ export default function Login() {
   const [error, setError] = useState('');
 
   // Helper: get role from Firestore or create default customer doc
-  const handleRedirect = async (uid: string, email: string | null, displayName?: string | null) => {
+  const handleRedirect = async (uid: string, email: string | null, displayName: string | null, provider: 'password' | 'google') => {
     const userRef = doc(db, 'users', uid);
     const userSnap = await getDoc(userRef);
     let role: UserRole = 'customer';
@@ -28,15 +28,18 @@ export default function Login() {
     let emailVerified: boolean | undefined;
     
     if (!userSnap.exists()) {
-      // FORCE create a document for Google/email login if missing
+      // FORCE create a document for Google/email login if missing.
+      // A missing doc on a password login means signup was interrupted, so keep it unverified.
       await setDoc(userRef, {
         uid,
         email: email || '',
         name: displayName || '',
         role: 'customer',
         status: 'approved',
+        ...(provider === 'password' ? { emailVerified: false } : {}),
         createdAt: new Date(),
       });
+      emailVerified = provider === 'password' ? false : undefined;
     } else {
       const data = userSnap.data();
       role = data.role as UserRole;
@@ -78,16 +81,10 @@ export default function Login() {
     setLoading(true);
     try {
       const userCred = await signInWithEmailAndPassword(auth, email, password);
-      await handleRedirect(userCred.user.uid, userCred.user.email);
+      await handleRedirect(userCred.user.uid, userCred.user.email, null, 'password');
     } catch (err: any) {
       console.error(err);
-      if (err.code === 'auth/user-not-found') {
-        setError('No account found with this email. Please sign up first.');
-      } else if (err.code === 'auth/wrong-password') {
-        setError('Incorrect password. Try again.');
-      } else {
-        setError('Invalid email or password.');
-      }
+      setError('Invalid email or password.');
     } finally {
       setLoading(false);
     }
@@ -100,7 +97,7 @@ export default function Login() {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
-      await handleRedirect(user.uid, user.email, user.displayName);
+      await handleRedirect(user.uid, user.email, user.displayName, 'google');
     } catch (err: any) {
       console.error(err);
       setError('Google login failed. Please try again.');
