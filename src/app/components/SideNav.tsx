@@ -22,7 +22,7 @@ export function SideNav() {
     { label: 'Home', icon: <Home size={18} />, path: '/customer' },
     { label: 'Discover', icon: <Search size={18} />, path: '/customer/discover' },
     { label: 'Map', icon: <Map size={18} />, path: '/customer/map' },
-    { label: 'My Projects', icon: <FolderOpen size={18} />, path: '/customer/projects' },
+    { label: 'My Orders', icon: <FolderOpen size={18} />, path: '/customer/orders' },
     { label: 'Messages', icon: <MessageSquare size={18} />, path: '/customer/messages' },
     { label: 'Profile', icon: <User size={18} />, path: '/customer/profile' },
   ];

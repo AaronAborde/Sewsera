@@ -15,7 +15,7 @@ export function BottomNav() {
     { label: 'Home', icon: <Home size={20} />, path: '/customer' },
     { label: 'Discover', icon: <Search size={20} />, path: '/customer/discover' },
     { label: 'Map', icon: <Map size={20} />, path: '/customer/map' },
-    { label: 'Projects', icon: <FolderOpen size={20} />, path: '/customer/projects' },
+    { label: 'Orders', icon: <FolderOpen size={20} />, path: '/customer/orders' },
     { label: 'Messages', icon: <MessageSquare size={20} />, path: '/customer/messages' },
   ];
 

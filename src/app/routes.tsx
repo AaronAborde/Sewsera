@@ -9,7 +9,7 @@ import MapPage from './pages/customer/MapPage';
 import TailorProfile from './pages/customer/TailorProfile';
 import FabricDetail from './pages/customer/FabricDetail';
 import Booking from './pages/customer/Booking';
-import Projects from './pages/customer/Projects';
+import CustomerOrders from './pages/customer/Projects';
 import Messages from './pages/shared/Messages';
 import Profile from './pages/shared/Profile';
 import SetLocationPage from './pages/shared/SetLocationPage';
@@ -38,7 +38,8 @@ export const router = createBrowserRouter([
   { path: '/customer/tailor/:id', Component: TailorProfile },
   { path: '/customer/fabric/:id', Component: FabricDetail },
   { path: '/customer/booking', Component: Booking },
-  { path: '/customer/projects', Component: Projects },
+  { path: '/customer/orders', Component: CustomerOrders },
+  { path: '/customer/projects', element: <Navigate to="/customer/orders" replace /> },
   { path: '/customer/messages', Component: Messages },
   { path: '/customer/profile', Component: Profile },
 

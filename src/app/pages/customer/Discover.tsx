@@ -1,7 +1,7 @@
 // src/app/pages/customer/Discover.tsx
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Search, Star, MapPin, Filter, Scissors, Package, SlidersHorizontal } from 'lucide-react';
+import { Search, Star, MapPin, Scissors, Package, SlidersHorizontal } from 'lucide-react';
 import { Layout } from '../../components/Layout';
 import { db } from '../../firebase';
 import { collection, getDocs } from 'firebase/firestore';
@@ -46,17 +46,34 @@ export default function Discover() {
   const [loading, setLoading] = useState(true);
 
   const tailorTags = ['All', 'Barong Tagalog', 'Suits', 'Gowns', 'Bridal', 'Filipiniana'];
-  const fabricTags = ['All', 'Traditional', 'Premium', 'Casual'];
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [tailorsSnap, fabricsSnap] = await Promise.all([
+        const [tailorsSnap, fabricsSnap, inventorySnap, shopsSnap] = await Promise.all([
           getDocs(collection(db, 'tailors')),
           getDocs(collection(db, 'fabrics')),
+          getDocs(collection(db, 'inventory')),
+          getDocs(collection(db, 'shops')),
         ]);
         setTailors(tailorsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tailor)));
-        setFabrics(fabricsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Fabric)));
+        const shopNames = new Map(shopsSnap.docs.map(d => [d.id, d.data().shopName as string]));
+        // Sellers list fabrics in "inventory"; "fabrics" only holds a few legacy docs.
+        const fabricList = [...inventorySnap.docs, ...fabricsSnap.docs].map(doc => {
+          const d = doc.data();
+          return {
+            id: doc.id,
+            name: d.name || 'Fabric',
+            seller: d.seller || shopNames.get(d.sellerId) || 'Fabric Seller',
+            price: Number(d.price) || 0,
+            unit: d.unit || 'm',
+            image: d.imageUrl || d.image || '',
+            category: d.category || 'Fabric',
+            rating: Number(d.rating) || 0,
+            stock: Number(d.stock) || 0,
+          } as Fabric;
+        });
+        setFabrics(fabricList);
       } catch (error) {
         console.error("Error fetching discover data:", error);
       } finally {
@@ -66,8 +83,10 @@ export default function Discover() {
     fetchData();
   }, []);
 
+  const fabricTags = ['All', ...Array.from(new Set(fabrics.map(f => f.category).filter(Boolean)))];
+
   const filteredTailors = tailors.filter(t => {
-    const matchSearch = !search || t.name.toLowerCase().includes(search.toLowerCase()) || t.specialty.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = !search || t.name.toLowerCase().includes(search.toLowerCase()) || (t.specialty || '').toLowerCase().includes(search.toLowerCase());
     const matchTag = !selectedTag || selectedTag === 'All' || t.tags?.includes(selectedTag);
     return matchSearch && matchTag;
   });
@@ -203,7 +222,13 @@ export default function Discover() {
                   className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all text-left"
                 >
                   <div className="h-36 overflow-hidden">
-                    <img src={f.image} alt={f.name} className="w-full h-full object-cover" />
+                    {f.image ? (
+                      <img src={f.image} alt={f.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                        <Package size={28} className="text-gray-300" />
+                      </div>
+                    )}
                   </div>
                   <div className="p-3">
                     <div className="flex items-start justify-between gap-1">
@@ -212,7 +237,7 @@ export default function Discover() {
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">{f.seller}</p>
                     <div className="flex items-center justify-between mt-2">
-                      <p className="text-sm" style={{ color: C.primary }}>₱{f.price}<span className="text-xs text-gray-400">/m</span></p>
+                      <p className="text-sm" style={{ color: C.primary }}>₱{f.price}<span className="text-xs text-gray-400">/{f.unit}</span></p>
                       <div className="flex items-center gap-0.5">
                         <Star size={10} className="fill-yellow-400 text-yellow-400" />
                         <span className="text-xs text-gray-500">{f.rating}</span>
