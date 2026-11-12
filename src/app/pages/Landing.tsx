@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router';
 import { Scissors, Star, Users, Package, ArrowRight, CheckCircle } from 'lucide-react';
+import { usePublicStats } from '../useStats';
 
 const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', gold: '#C89558', bg: '#F5F0E8' };
 
@@ -9,6 +10,7 @@ const TAILOR_IMG = 'https://images.unsplash.com/photo-1580880783096-cee2daa9c67f
 
 export default function Landing() {
   const navigate = useNavigate();
+  const stats = usePublicStats();
 
   return (
     <div className="min-h-screen" style={{ fontFamily: "'Inter', sans-serif", background: '#fff' }}>
@@ -75,9 +77,9 @@ export default function Landing() {
             {/* Stats */}
             <div className="flex flex-wrap gap-6 mt-12">
               {[
-                { v: '500+', l: 'Expert Tailors' },
-                { v: '2,000+', l: 'Happy Clients' },
-                { v: '120+', l: 'Fabric Sellers' },
+                { v: stats.tailors.toLocaleString(), l: 'Expert Tailors' },
+                { v: stats.customers.toLocaleString(), l: 'Happy Clients' },
+                { v: stats.sellers.toLocaleString(), l: 'Fabric Sellers' },
                 { v: '4.9★', l: 'Avg. Rating' },
               ].map(s => (
                 <div key={s.l} className="text-center">

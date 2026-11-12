@@ -7,12 +7,14 @@ import { signInWithEmailAndPassword, signInWithPopup, signOut } from 'firebase/a
 import { auth, db, googleProvider } from '../../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import type { UserRole } from '../../context/AppContext';
+import { usePublicStats } from '../../useStats';
 
 const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', bg: '#F5F0E8' };
 
 export default function Login() {
   const navigate = useNavigate();
   const { setIsAuthenticated, setUserRole } = useApp();
+  const stats = usePublicStats();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -124,9 +126,9 @@ export default function Login() {
         </div>
         <div className="flex gap-4">
           {[
-            { n: '500+', l: 'Tailors' },
-            { n: '2K+', l: 'Customers' },
-            { n: '120+', l: 'Sellers' },
+            { n: stats.tailors.toLocaleString(), l: 'Tailors' },
+            { n: stats.customers.toLocaleString(), l: 'Customers' },
+            { n: stats.sellers.toLocaleString(), l: 'Sellers' },
           ].map(s => (
             <div key={s.l} className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.07)' }}>
               <p className="text-xl" style={{ fontFamily: "'Playfair Display', serif" }}>{s.n}</p>

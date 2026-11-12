@@ -7,6 +7,7 @@ import { Layout } from '../../components/Layout';
 import { useApp } from '../../context/AppContext';
 import { db } from '../../firebase';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { toBooking, type Booking } from '../../bookings';
 
 const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', gold: '#C89558' };
 
@@ -16,21 +17,10 @@ const STATUS_CONFIG = {
   completed: { label: 'Completed', color: '#10B981', bg: '#ECFDF5' },
 };
 
-interface Job {
-  id: string;
-  service: string;
-  client: string;
-  amount: number;
-  netEarnings?: number;
-  status: string;
-  progress: number;
-  deadline: string;
-}
-
 export default function TailorDashboard() {
   const navigate = useNavigate();
   const { currentUser } = useApp();
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<Booking[]>([]);
   const [rating, setRating] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -40,10 +30,10 @@ export default function TailorDashboard() {
     const fetchTailorData = async () => {
       try {
         const [jobsSnap, tailorSnap] = await Promise.all([
-          getDocs(query(collection(db, 'jobs'), where('tailorId', '==', currentUser.uid))),
+          getDocs(query(collection(db, 'bookings'), where('tailorId', '==', currentUser.uid))),
           getDoc(doc(db, 'tailors', currentUser.uid)),
         ]);
-        setJobs(jobsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Job)));
+        setJobs(jobsSnap.docs.map(d => toBooking(d.id, d.data())));
         setRating(Number(tailorSnap.data()?.rating) || 0);
       } catch (e) {
         console.error('Error fetching tailor data:', e);
@@ -57,10 +47,9 @@ export default function TailorDashboard() {
 
   const activeJobs = jobs.filter(j => j.status !== 'completed').length;
   const completedJobs = jobs.filter(j => j.status === 'completed').length;
-  // Payout after the platform commission; older jobs only have the gross amount.
   const earnings = jobs
     .filter(j => j.status === 'completed')
-    .reduce((sum, j) => sum + (Number(j.netEarnings ?? j.amount) || 0), 0);
+    .reduce((sum, j) => sum + j.amount, 0);
 
   const breakdown = [
     { status: 'Pending', count: jobs.filter(j => j.status === 'pending').length },
@@ -148,7 +137,7 @@ export default function TailorDashboard() {
                         <p className="text-xs text-gray-400">{job.client}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm" style={{ color: C.primary }}>₱{(Number(job.amount) || 0).toLocaleString()}</p>
+                        <p className="text-sm" style={{ color: C.primary }}>{job.amount > 0 ? `₱${job.amount.toLocaleString()}` : 'To be quoted'}</p>
                         <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: cfg.bg, color: cfg.color }}>
                           {cfg.label}
                         </span>
@@ -165,7 +154,7 @@ export default function TailorDashboard() {
                         </div>
                       </div>
                     )}
-                    <p className="text-xs text-gray-400 mt-2">Due: {job.deadline}</p>
+                    {job.deadline && <p className="text-xs text-gray-400 mt-2">Due: {job.deadline}</p>}
                   </div>
                 );
               })}
