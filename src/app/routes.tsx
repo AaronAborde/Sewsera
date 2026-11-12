@@ -3,6 +3,7 @@ import Landing from './pages/Landing';
 import Onboarding from './pages/Onboarding';
 import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
+import VerifyOtp from './pages/auth/VerifyOtp';
 import CustomerHome from './pages/customer/CustomerHome';
 import Discover from './pages/customer/Discover';
 import MapPage from './pages/customer/MapPage';
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
   { path: '/onboarding', Component: Onboarding },
   { path: '/auth/login', Component: Login },
   { path: '/auth/signup', Component: Signup },
+  { path: '/auth/verify-otp', Component: VerifyOtp },
 
   // Customer Routes
   { path: '/customer', Component: CustomerHome },

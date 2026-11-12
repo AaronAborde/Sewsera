@@ -12,7 +12,7 @@ const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', bg: '#F5F0E8' 
 
 export default function Signup() {
   const navigate = useNavigate();
-  const { userRole, setIsAuthenticated, setUserRole } = useApp();
+  const { userRole } = useApp();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -46,18 +46,16 @@ export default function Signup() {
         phone,
         role,
         status: role === 'customer' ? 'approved' : 'pending',
+        emailVerified: false,
         createdAt: new Date(),
       });
-      // Vendors wait for admin approval, so don't keep them signed in.
-      if (role !== 'customer') await signOut(auth);
-      setSuccess(true);
       if (role === 'customer') {
-        setTimeout(() => {
-          setIsAuthenticated(true);
-          setUserRole(role);
-          navigate(`/${role}`);
-        }, 1500);
+        navigate('/auth/verify-otp', { replace: true });
+        return;
       }
+      // Vendors wait for admin approval, so don't keep them signed in.
+      await signOut(auth);
+      setSuccess(true);
     } catch (err: any) {
       console.error(err);
       if (err.code === 'auth/email-already-in-use') {
@@ -76,17 +74,13 @@ export default function Signup() {
           <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: '#E8F9F0' }}>
             <CheckCircle size={40} className="text-green-500" />
           </div>
-          <h2 className="text-2xl mb-2" style={{ color: C.dark, fontFamily: "'Playfair Display', serif" }}>Welcome to SewsEra!</h2>
+          <h2 className="text-2xl mb-2" style={{ color: C.dark, fontFamily: "'Playfair Display', serif" }}>Application Submitted</h2>
           <p className="text-sm text-gray-500">
-            {role === 'customer'
-              ? 'Setting up your account...'
-              : 'Your account is pending admin approval. You can sign in once a SewsEra admin reviews your documents.'}
+            Your account is pending admin approval. You can sign in once a SewsEra admin reviews your documents.
           </p>
-          {role !== 'customer' && (
-            <button onClick={() => navigate('/auth/login')} className="mt-5 px-4 py-2.5 rounded-xl text-white text-sm" style={{ background: C.primary }}>
-              Back to sign in
-            </button>
-          )}
+          <button onClick={() => navigate('/auth/login')} className="mt-5 px-4 py-2.5 rounded-xl text-white text-sm" style={{ background: C.primary }}>
+            Back to sign in
+          </button>
         </div>
       </div>
     );

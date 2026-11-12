@@ -25,6 +25,7 @@ export default function Login() {
     const userSnap = await getDoc(userRef);
     let role: UserRole = 'customer';
     let status = 'approved';
+    let emailVerified: boolean | undefined;
     
     if (!userSnap.exists()) {
       // FORCE create a document for Google/email login if missing
@@ -40,6 +41,7 @@ export default function Login() {
       const data = userSnap.data();
       role = data.role as UserRole;
       status = data.status || (role === 'tailor' || role === 'seller' ? 'pending' : 'approved');
+      emailVerified = data.emailVerified;
     }
 
     // Tailors / sellers only get in after an admin approves their documents.
@@ -52,7 +54,14 @@ export default function Login() {
       );
       return;
     }
-    
+
+    // Accounts created with email/password must confirm their 6-digit code first.
+    // Older accounts have no flag and stay verified.
+    if (emailVerified === false) {
+      navigate('/auth/verify-otp', { replace: true });
+      return;
+    }
+
     setUserRole(role);
     setIsAuthenticated(true);
     navigate(`/${role}`);
