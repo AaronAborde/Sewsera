@@ -72,6 +72,10 @@ service cloud.firestore {
       // customers' reviews update the average rating + review count
       allow update: if signedIn()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'reviews']);
+      // the tailor pins their own shop on the map
+      allow update: if signedIn() && request.auth.uid == id
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lat', 'lng'])
+        && request.resource.data.lat is number && request.resource.data.lng is number;
     }
 
     // Reviews of tailors / fabrics: one per customer per target (document id is fixed)
@@ -101,6 +105,10 @@ service cloud.firestore {
     match /sellers/{id} {
       allow read: if signedIn();
       allow write: if isAdmin();
+      // the seller pins their own shop on the map
+      allow update: if signedIn() && request.auth.uid == id
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lat', 'lng'])
+        && request.resource.data.lat is number && request.resource.data.lng is number;
     }
 
     // ---------------------------------------------------------------

@@ -161,7 +161,6 @@ export default function MapPage() {
           ...sellersSnap.docs.map(d => build(d, 'seller')),
         ];
 
-        console.log('[MAP] markers', list);
         setMarkers(list);
       } catch (error) {
         console.error('Error fetching map markers:', error);
