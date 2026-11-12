@@ -1,7 +1,8 @@
-// src/app/pages/customer/FabricDetail.tsx
+// src/app/pages/tailor/FabricDetail.tsx
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { ArrowLeft, Star, MapPin, ShoppingCart, Minus, Plus, CheckCircle, MessageSquare } from 'lucide-react';
+import { Layout } from '../../components/Layout';
 import { PaymentModal } from '../../components/PaymentModal';
 import { useApp } from '../../context/AppContext';
 import { db } from '../../firebase';
@@ -46,7 +47,7 @@ export default function FabricDetail() {
         let snap = await getDoc(doc(db, 'inventory', id));
         if (!snap.exists()) snap = await getDoc(doc(db, 'fabrics', id));
         if (!snap.exists()) {
-          navigate('/customer/discover');
+          navigate('/tailor/fabrics');
           return;
         }
         const data: any = snap.data();
@@ -86,9 +87,11 @@ export default function FabricDetail() {
   const handleOrder = async () => {
     if (!currentUser || !fabric) return;
     try {
+      // The buyer is the tailor; customerId keeps the existing rules/seller view working.
       await addDoc(collection(db, 'fabricOrders'), {
         customerId: currentUser.uid,
         customerName: currentUser.name,
+        buyerRole: 'tailor',
         fabricId: fabric.id,
         fabricName: fabric.name,
         sellerId: fabric.sellerId,
@@ -106,11 +109,15 @@ export default function FabricDetail() {
     }
   };
 
+  const backToFabrics = () => (window.history.state?.idx > 0 ? navigate(-1) : navigate('/tailor/fabrics'));
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: C.bg }}>
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
+      <Layout title="Fabric">
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </Layout>
     );
   }
 
@@ -120,21 +127,23 @@ export default function FabricDetail() {
 
   if (ordered) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ background: C.bg }}>
-        <div className="w-20 h-20 rounded-full flex items-center justify-center mb-5" style={{ background: '#E8F9F0' }}>
-          <CheckCircle size={40} className="text-green-500" />
+      <Layout title="Fabric">
+        <div className="flex flex-col items-center justify-center px-6 py-16">
+          <div className="w-20 h-20 rounded-full flex items-center justify-center mb-5" style={{ background: '#E8F9F0' }}>
+            <CheckCircle size={40} className="text-green-500" />
+          </div>
+          <h2 className="text-2xl mb-2 text-center" style={{ color: C.dark, fontFamily: "'Playfair Display', serif" }}>Order Placed!</h2>
+          <p className="text-sm text-gray-500 text-center mb-6">{quantity}{fabric.unit} of {fabric.name} from {fabric.seller}</p>
+          <button onClick={() => navigate('/tailor/fabrics')} className="px-6 py-3 rounded-xl text-white text-sm" style={{ background: C.primary }}>
+            Back to Fabrics
+          </button>
         </div>
-        <h2 className="text-2xl mb-2 text-center" style={{ color: C.dark, fontFamily: "'Playfair Display', serif" }}>Order Placed!</h2>
-        <p className="text-sm text-gray-500 text-center mb-6">{quantity}m of {fabric.name} from {fabric.seller}</p>
-        <button onClick={() => navigate('/customer')} className="px-6 py-3 rounded-xl text-white text-sm" style={{ background: C.primary }}>
-          Back to Home
-        </button>
-      </div>
+      </Layout>
     );
   }
 
   return (
-    <div className="min-h-screen" style={{ background: C.bg, fontFamily: "'Inter', sans-serif" }}>
+    <Layout title="Fabric">
       <div className="relative">
         <div className="h-72 overflow-hidden">
           {fabric.image ? (
@@ -145,7 +154,7 @@ export default function FabricDetail() {
             </div>
           )}
         </div>
-        <button onClick={() => (window.history.state?.idx > 0 ? navigate(-1) : navigate('/customer/discover'))} className="absolute top-4 left-4 p-2.5 rounded-xl bg-white/90 backdrop-blur-sm shadow-sm hover:bg-white transition-colors">
+        <button onClick={backToFabrics} className="absolute top-4 left-4 p-2.5 rounded-xl bg-white/90 backdrop-blur-sm shadow-sm hover:bg-white transition-colors">
           <ArrowLeft size={18} style={{ color: C.dark }} />
         </button>
         <div className="absolute top-4 right-4 px-2.5 py-1 rounded-full text-xs text-white" style={{ background: C.teal }}>
@@ -226,7 +235,7 @@ export default function FabricDetail() {
         <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 style={{ color: C.dark }}>Quantity (meters)</h3>
+              <h3 style={{ color: C.dark }}>Quantity ({fabric.unit === 'm' ? 'meters' : fabric.unit})</h3>
               <p className="text-xs text-gray-400 mt-0.5">Total: ₱{total.toLocaleString()}</p>
             </div>
             <div className="flex items-center gap-3">
@@ -253,7 +262,7 @@ export default function FabricDetail() {
         {fabric.sellerId && (
           <div className="flex gap-2 mb-4">
             <button
-              onClick={() => navigate(`/customer/messages?to=${fabric.sellerId}&name=${encodeURIComponent(fabric.seller)}&role=seller`)}
+              onClick={() => navigate(`/tailor/messages?to=${fabric.sellerId}&name=${encodeURIComponent(fabric.seller)}&role=seller`)}
               className="flex items-center gap-2 px-4 py-3 rounded-xl border border-gray-200 text-sm transition-colors hover:bg-gray-50"
               style={{ color: C.dark }}
             >
@@ -265,7 +274,7 @@ export default function FabricDetail() {
         <button
           onClick={() => setPaymentOpen(true)}
           disabled={fabric.stock <= 0}
-          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white text-sm hover:opacity-90 transition-opacity mb-20 disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white text-sm hover:opacity-90 transition-opacity mb-8 disabled:opacity-50"
           style={{ background: C.primary }}
         >
           <ShoppingCart size={16} /> {fabric.stock > 0 ? `Order Now — ₱${total.toLocaleString()}` : 'Out of Stock'}
@@ -276,12 +285,12 @@ export default function FabricDetail() {
         isOpen={paymentOpen}
         onClose={() => setPaymentOpen(false)}
         amount={total}
-        description={`${quantity}m × ${fabric.name}`}
+        description={`${quantity}${fabric.unit} × ${fabric.name}`}
         onSuccess={() => {
           setPaymentOpen(false);
           handleOrder();
         }}
       />
-    </div>
+    </Layout>
   );
 }
