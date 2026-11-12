@@ -1,13 +1,13 @@
 // src/app/pages/customer/CustomerHome.tsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Search, Star, MapPin, ChevronRight, Scissors, Package, Bell } from 'lucide-react';
+import { Search, Star, MapPin, ChevronRight, Scissors } from 'lucide-react';
 import { Layout } from '../../components/Layout';
 import { useApp } from '../../context/AppContext';
 import { db } from '../../firebase';
 import { collection, getDocs, query, limit } from 'firebase/firestore';
 
-const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', gold: '#C89558', bg: '#F5F0E8' };
+const C = { primary: '#C4623F', dark: '#1A2B3C' };
 
 interface Tailor {
   id: string;
@@ -21,21 +21,11 @@ interface Tailor {
   image: string;
 }
 
-interface Fabric {
-  id: string;
-  name: string;
-  seller: string;
-  price: number;
-  unit: string;
-  image: string;
-}
-
 export default function CustomerHome() {
   const { currentUser } = useApp();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [tailors, setTailors] = useState<Tailor[]>([]);
-  const [fabrics, setFabrics] = useState<Fabric[]>([]);
   const [loading, setLoading] = useState(true);
 
   const firstName = currentUser?.name?.split(' ')[0] || 'Customer';
@@ -48,12 +38,6 @@ export default function CustomerHome() {
         const tailorsSnap = await getDocs(tailorsQuery);
         const tailorsList = tailorsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tailor));
         setTailors(tailorsList);
-
-        // Fetch fabrics (limit 4)
-        const fabricsQuery = query(collection(db, 'fabrics'), limit(4));
-        const fabricsSnap = await getDocs(fabricsQuery);
-        const fabricsList = fabricsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Fabric));
-        setFabrics(fabricsList);
       } catch (error) {
         console.error("Error fetching home data:", error);
       } finally {
@@ -87,7 +71,7 @@ export default function CustomerHome() {
           <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Search tailors, fabrics, services..."
+            placeholder="Search tailors, services..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             onFocus={() => navigate('/customer/discover')}
@@ -97,10 +81,9 @@ export default function CustomerHome() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-3 gap-3 mb-7">
+        <div className="grid grid-cols-2 gap-3 mb-7">
           {[
             { label: 'Find Tailors', icon: <Scissors size={20} />, color: C.primary, path: '/customer/discover' },
-            { label: 'Shop Fabrics', icon: <Package size={20} />, color: C.teal, path: '/customer/discover' },
             { label: 'View Map', icon: <MapPin size={20} />, color: C.dark, path: '/customer/map' },
           ].map(a => (
             <button
@@ -169,34 +152,6 @@ export default function CustomerHome() {
                   <div className={`mt-1 px-2 py-0.5 rounded-full text-xs ${t.available ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
                     {t.available ? 'Available' : 'Busy'}
                   </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Featured Fabrics */}
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 style={{ color: C.dark }}>Popular Fabrics</h3>
-            <button onClick={() => navigate('/customer/discover')} className="flex items-center gap-1 text-sm" style={{ color: C.primary }}>
-              See All <ChevronRight size={14} />
-            </button>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {fabrics.map(f => (
-              <button
-                key={f.id}
-                onClick={() => navigate(`/customer/fabric/${f.id}`)}
-                className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all text-left"
-              >
-                <div className="h-28 overflow-hidden">
-                  <img src={f.image} alt={f.name} className="w-full h-full object-cover" />
-                </div>
-                <div className="p-3">
-                  <p className="text-xs font-medium truncate" style={{ color: C.dark }}>{f.name}</p>
-                  <p className="text-xs text-gray-400 truncate">{f.seller}</p>
-                  <p className="text-xs mt-1" style={{ color: C.primary }}>₱{f.price}/{f.unit.split(' ')[1]}</p>
                 </div>
               </button>
             ))}

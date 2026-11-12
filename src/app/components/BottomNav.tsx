@@ -22,6 +22,7 @@ export function BottomNav() {
   const tailorItems: NavItem[] = [
     { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/tailor' },
     { label: 'Jobs', icon: <Briefcase size={20} />, path: '/tailor/jobs' },
+    { label: 'Fabrics', icon: <Package size={20} />, path: '/tailor/fabrics' },
     { label: 'Schedule', icon: <CalendarDays size={20} />, path: '/tailor/schedule' },
     { label: 'Portfolio', icon: <Image size={20} />, path: '/tailor/portfolio' },
     { label: 'Messages', icon: <MessageSquare size={20} />, path: '/tailor/messages' },

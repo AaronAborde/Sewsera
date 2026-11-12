@@ -5,6 +5,7 @@ import { Layout } from '../../components/Layout';
 import { useApp } from '../../context/AppContext';
 import { db } from '../../firebase';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { toBooking, type Booking } from '../../bookings';
 
 const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', bg: '#F5F0E8' };
 
@@ -14,33 +15,20 @@ const STATUS_CONFIG = {
   completed: { label: 'Completed', color: '#10B981', bg: '#ECFDF5' },
 };
 
-interface Job {
-  id: string;
-  service: string;
-  client: string;
-  amount: number;
-  status: 'pending' | 'in_progress' | 'completed';
-  progress: number;
-  deadline: string;
-  measurements?: string;
-  notes?: string;
-}
-
 export default function Jobs() {
   const { currentUser } = useApp();
   const [filter, setFilter] = useState<'all' | 'pending' | 'in_progress' | 'completed'>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!currentUser?.uid) return;
     const fetchJobs = async () => {
       try {
-        const q = query(collection(db, 'jobs'), where('tailorId', '==', currentUser.uid));
+        const q = query(collection(db, 'bookings'), where('tailorId', '==', currentUser.uid));
         const snapshot = await getDocs(q);
-        const jobsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Job));
-        setJobs(jobsList);
+        setJobs(snapshot.docs.map(d => toBooking(d.id, d.data())));
       } catch (error) {
         console.error("Error fetching jobs:", error);
       } finally {
@@ -50,9 +38,9 @@ export default function Jobs() {
     fetchJobs();
   }, [currentUser]);
 
-  const updateJob = async (id: string, updates: Partial<Job>) => {
+  const updateJob = async (id: string, updates: Partial<Booking>) => {
     try {
-      await updateDoc(doc(db, 'jobs', id), updates);
+      await updateDoc(doc(db, 'bookings', id), updates);
       setJobs(prev => prev.map(j => j.id === id ? { ...j, ...updates } : j));
     } catch (error) {
       console.error("Error updating job:", error);
@@ -138,7 +126,7 @@ export default function Jobs() {
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <p className="text-sm" style={{ color: C.dark }}>{job.service}</p>
-                      <p className="text-xs text-gray-400">{job.client} · Due {job.deadline}</p>
+                      <p className="text-xs text-gray-400">{job.client}{job.deadline ? ` · Due ${job.deadline}` : ''}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: cfg.bg, color: cfg.color }}>
@@ -149,7 +137,7 @@ export default function Jobs() {
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <span className="text-sm" style={{ color: C.primary }}>₱{job.amount.toLocaleString()}</span>
+                    <span className="text-sm" style={{ color: C.primary }}>{job.amount > 0 ? `₱${job.amount.toLocaleString()}` : 'To be quoted'}</span>
                     {job.status === 'in_progress' && (
                       <span className="text-xs text-gray-400">{job.progress}% done</span>
                     )}
@@ -195,7 +183,16 @@ export default function Jobs() {
                         </div>
                       </div>
                     )}
-                    {job.status !== 'completed' && (
+                    {job.status === 'pending' && (
+                      <button
+                        onClick={() => updateJob(job.id, { status: 'in_progress' })}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-xs hover:opacity-90 transition-opacity"
+                        style={{ background: C.teal }}
+                      >
+                        <CheckCircle2 size={14} /> Start Work
+                      </button>
+                    )}
+                    {job.status === 'in_progress' && (
                       <button
                         onClick={() => markComplete(job.id)}
                         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-xs hover:opacity-90 transition-opacity"

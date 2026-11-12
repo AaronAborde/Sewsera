@@ -30,6 +30,7 @@ export function SideNav() {
   const tailorItems: NavItem[] = [
     { label: 'Dashboard', icon: <LayoutDashboard size={18} />, path: '/tailor' },
     { label: 'Jobs', icon: <Briefcase size={18} />, path: '/tailor/jobs' },
+    { label: 'Fabrics', icon: <Package size={18} />, path: '/tailor/fabrics' },
     { label: 'Schedule', icon: <CalendarDays size={18} />, path: '/tailor/schedule' },
     { label: 'Portfolio', icon: <Image size={18} />, path: '/tailor/portfolio' },
     { label: 'Messages', icon: <MessageSquare size={18} />, path: '/tailor/messages' },
