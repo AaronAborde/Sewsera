@@ -4,16 +4,17 @@ import {
   CalendarDays, Image, ClipboardList, Package, Store, User, Users, LogOut, Scissors
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { useNotificationCounts } from '../useNotifications';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase';
 
-const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', bg: '#F5F0E8' };
+const C = { primary: '#C4623F', dark: '#1A2B3C' };
 
 interface NavItem { label: string; icon: React.ReactNode; path: string; }
 
 export function SideNav() {
-  const { userRole, currentUser, setIsAuthenticated, setUserRole } = useApp();
+  const { userRole, setIsAuthenticated, setUserRole } = useApp();
+  const { unreadMessages } = useNotificationCounts();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -51,9 +52,6 @@ export function SideNav() {
 
   const items = userRole === 'customer' ? customerItems : userRole === 'tailor' ? tailorItems : userRole === 'admin' ? adminItems : sellerItems;
 
-  const roleBadgeColor = userRole === 'customer' ? C.teal : userRole === 'tailor' ? C.primary : C.dark;
-  const roleLabel = userRole === 'customer' ? 'Customer' : userRole === 'tailor' ? 'Tailor' : userRole === 'admin' ? 'Administrator' : 'Fabric Seller';
-
   const handleLogout = async () => {
     await signOut(auth);
     setIsAuthenticated(false);
@@ -79,36 +77,11 @@ export function SideNav() {
         </div>
       </div>
 
-      {/* User Info */}
-      <div className="p-4 mx-3 my-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.07)' }}>
-        <div className="flex items-center gap-3">
-          <div
-            className="w-10 h-10 rounded-full flex items-center justify-center text-sm text-white"
-            style={{ background: roleBadgeColor }}
-          >
-            <Avatar className="w-10 h-10">
-              {currentUser?.avatarUrl && <AvatarImage src={currentUser.avatarUrl} alt="" />}
-              <AvatarFallback className="text-white text-sm" style={{ background: roleBadgeColor }}>
-                {currentUser?.name?.slice(0, 2).toUpperCase() || '?'}
-              </AvatarFallback>
-            </Avatar>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-white text-sm truncate">{currentUser?.name || 'User'}</p>
-            <span
-              className="text-xs px-2 py-0.5 rounded-full text-white"
-              style={{ background: roleBadgeColor + '80' }}
-            >
-              {roleLabel}
-            </span>
-          </div>
-        </div>
-      </div>
-
       {/* Navigation */}
       <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
         {items.map(item => {
           const isActive = location.pathname === item.path;
+          const badge = item.label === 'Messages' ? unreadMessages : 0;
           return (
             <button
               key={item.path}
@@ -121,7 +94,17 @@ export function SideNav() {
             >
               {item.icon}
               <span className="text-sm">{item.label}</span>
-              {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white/60" />}
+              <span className="ml-auto flex items-center gap-2">
+                {badge > 0 && (
+                  <span
+                    className="min-w-[18px] h-[18px] px-1 rounded-full text-[10px] flex items-center justify-center text-white"
+                    style={{ background: C.primary }}
+                  >
+                    {badge > 9 ? '9+' : badge}
+                  </span>
+                )}
+                {isActive && <span className="w-1.5 h-1.5 rounded-full bg-white/60" />}
+              </span>
             </button>
           );
         })}

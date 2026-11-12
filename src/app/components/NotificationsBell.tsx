@@ -1,10 +1,9 @@
 // src/app/components/NotificationsBell.tsx
 import { useEffect, useRef, useState, ReactNode } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import { Bell, MessageSquare, ShoppingBag } from 'lucide-react';
-import { collection, getDocs, onSnapshot, query, where } from 'firebase/firestore';
-import { db } from '../firebase';
 import { useApp } from '../context/AppContext';
+import { useNotificationCounts } from '../useNotifications';
 
 const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F' };
 
@@ -17,49 +16,11 @@ interface Item {
 }
 
 export function NotificationsBell() {
-  const { currentUser, userRole } = useApp();
+  const { userRole } = useApp();
   const navigate = useNavigate();
-  const location = useLocation();
   const [open, setOpen] = useState(false);
-  const [unreadMessages, setUnreadMessages] = useState(0);
-  const [pendingOrders, setPendingOrders] = useState(0);
+  const { unreadMessages, pendingOrders } = useNotificationCounts();
   const boxRef = useRef<HTMLDivElement>(null);
-
-  // Unread messages come from the conversations the user takes part in.
-  useEffect(() => {
-    if (!currentUser?.uid) return;
-    const uid = currentUser.uid;
-    const q = query(collection(db, 'conversations'), where('participants', 'array-contains', uid));
-    return onSnapshot(
-      q,
-      (snapshot) => {
-        let total = 0;
-        snapshot.forEach((d) => {
-          total += Number(d.data().unreadCount?.[uid]) || 0;
-        });
-        setUnreadMessages(total);
-      },
-      () => setUnreadMessages(0)
-    );
-  }, [currentUser?.uid]);
-
-  // Sellers also get a notification for every fabric order that still needs work.
-  useEffect(() => {
-    if (!currentUser?.uid || userRole !== 'seller') {
-      setPendingOrders(0);
-      return;
-    }
-    let cancelled = false;
-    getDocs(query(collection(db, 'fabricOrders'), where('sellerId', '==', currentUser.uid)))
-      .then((snapshot) => {
-        if (cancelled) return;
-        setPendingOrders(snapshot.docs.filter((d) => d.data().status === 'pending').length);
-      })
-      .catch(() => setPendingOrders(0));
-    return () => {
-      cancelled = true;
-    };
-  }, [currentUser?.uid, userRole, location.pathname]);
 
   useEffect(() => {
     if (!open) return;
