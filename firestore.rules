@@ -33,7 +33,7 @@ service cloud.firestore {
           && request.resource.data.role == resource.data.role
           // can only touch these fields
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-               'name', 'phone', 'location', 'avatarUrl', 'notifications', 'emailAlerts',
+               'name', 'phone', 'location', 'avatarUrl', 'coverUrl', 'notifications', 'emailAlerts',
                'status', 'documentsSubmitted', 'documentIds', 'submittedAt', 'emailVerified'
              ])
           // status: the only allowed change is back to "pending" (resubmitting documents)

@@ -14,6 +14,7 @@ export interface User {
   location?: string;
   role: UserRole;
   avatarUrl?: string;
+  coverUrl?: string;
   notifications?: boolean;
   emailAlerts?: boolean;
   createdAt?: Date;

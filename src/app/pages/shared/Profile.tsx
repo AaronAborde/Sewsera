@@ -11,20 +11,20 @@ import { sendPasswordResetEmail, signOut } from 'firebase/auth';
 const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', bg: '#F5F0E8' };
 
 // Shrink the picked photo to a small JPEG data URL so it fits in the user document.
-const toAvatarDataUrl = (file: File) =>
+const toImageDataUrl = (file: File, max: number, quality: number) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       const img = new Image();
       img.onload = () => {
-        const scale = Math.min(1, 160 / Math.max(img.width, img.height));
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
         const canvas = document.createElement('canvas');
         canvas.width = Math.round(img.width * scale);
         canvas.height = Math.round(img.height * scale);
         const ctx = canvas.getContext('2d');
         if (!ctx) return reject(new Error('Canvas not available'));
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', 0.8));
+        resolve(canvas.toDataURL('image/jpeg', quality));
       };
       img.onerror = () => reject(new Error('Could not read the image'));
       img.src = reader.result as string;
@@ -44,10 +44,12 @@ export default function Profile() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [avatarBusy, setAvatarBusy] = useState(false);
+  const [coverBusy, setCoverBusy] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [pinned, setPinned] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const coverRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -138,7 +140,7 @@ export default function Profile() {
     setAvatarBusy(true);
     setError('');
     try {
-      const avatarUrl = await toAvatarDataUrl(file);
+      const avatarUrl = await toImageDataUrl(file, 160, 0.8);
       await updateDoc(doc(db, 'users', currentUser.uid), { avatarUrl });
       setCurrentUser(prev => (prev ? { ...prev, avatarUrl } : null));
       flash('Profile picture updated.');
@@ -148,6 +150,28 @@ export default function Profile() {
     } finally {
       setAvatarBusy(false);
       if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const pickCover = async (file: File | undefined) => {
+    if (!file || !currentUser?.uid) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Please choose an image file.');
+      return;
+    }
+    setCoverBusy(true);
+    setError('');
+    try {
+      const coverUrl = await toImageDataUrl(file, 1000, 0.7);
+      await updateDoc(doc(db, 'users', currentUser.uid), { coverUrl });
+      setCurrentUser(prev => (prev ? { ...prev, coverUrl } : null));
+      flash('Cover photo updated.');
+    } catch (e) {
+      console.error('Error updating cover:', e);
+      setError('Could not update your cover photo.');
+    } finally {
+      setCoverBusy(false);
+      if (coverRef.current) coverRef.current.value = '';
     }
   };
 
@@ -217,13 +241,29 @@ export default function Profile() {
 
         {/* Profile Card */}
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-4">
-          <div className="h-24 relative" style={{ background: `linear-gradient(135deg, ${C.dark} 0%, ${roleColor} 100%)` }}>
+          <div
+            className="h-24 relative"
+            style={
+              currentUser?.coverUrl
+                ? { backgroundImage: `url(${currentUser.coverUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                : { background: `linear-gradient(135deg, ${C.dark} 0%, ${roleColor} 100%)` }
+            }
+          >
+            <input
+              ref={coverRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => pickCover(e.target.files?.[0])}
+            />
             <button
-              onClick={editing ? cancelEdit : startEdit}
-              aria-label={editing ? 'Cancel editing' : 'Edit profile'}
-              className="absolute top-3 right-3 p-1.5 rounded-lg bg-white/20 text-white hover:bg-white/30 transition-colors"
+              onClick={() => coverRef.current?.click()}
+              disabled={coverBusy}
+              aria-label="Change cover photo"
+              title="Change cover photo"
+              className="absolute top-3 right-3 p-1.5 rounded-lg bg-white/20 text-white hover:bg-white/30 transition-colors disabled:opacity-50"
             >
-              {editing ? <X size={14} /> : <Edit2 size={14} />}
+              <Edit2 size={14} />
             </button>
           </div>
           <div className="px-5 pb-5">
@@ -256,7 +296,19 @@ export default function Profile() {
                 </button>
               </div>
               <div className="mb-1">
-                <h2 className="text-xl" style={{ color: C.dark }}>{currentUser?.name || 'User'}</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl" style={{ color: C.dark }}>{currentUser?.name || 'User'}</h2>
+                  {!editing && (
+                    <button
+                      onClick={startEdit}
+                      aria-label="Edit profile info"
+                      title="Edit profile info"
+                      className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                  )}
+                </div>
                 <span className="text-xs px-2 py-0.5 rounded-full text-white" style={{ background: roleColor }}>
                   {roleLabel}
                 </span>
