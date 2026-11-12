@@ -5,6 +5,7 @@ import { Mail, Phone, MapPin, Bell, Shield, LogOut, ChevronRight, Edit2, Camera,
 import { Layout } from '../../components/Layout';
 import { useApp } from '../../context/AppContext';
 import { db, auth } from '../../firebase';
+import { reverseGeocode } from '../../geo';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { sendPasswordResetEmail, signOut } from 'firebase/auth';
 
@@ -48,6 +49,7 @@ export default function Profile() {
   const [securityOpen, setSecurityOpen] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [pinned, setPinned] = useState(false);
+  const [listingAddress, setListingAddress] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const coverRef = useRef<HTMLInputElement>(null);
 
@@ -63,9 +65,23 @@ export default function Profile() {
         }
         // Vendors pin their shop on a separate listing doc; show that state here too.
         if (userRole === 'tailor' || userRole === 'seller') {
-          const listingSnap = await getDoc(doc(db, userRole === 'tailor' ? 'tailors' : 'sellers', currentUser.uid));
+          const collectionName = userRole === 'tailor' ? 'tailors' : 'sellers';
+          const listingSnap = await getDoc(doc(db, collectionName, currentUser.uid));
           const listing = listingSnap.data();
-          setPinned(Number.isFinite(Number(listing?.lat)) && Number.isFinite(Number(listing?.lng)));
+          const hasPin = Number.isFinite(Number(listing?.lat)) && Number.isFinite(Number(listing?.lng));
+          setPinned(hasPin);
+          const savedAddress = typeof listing?.address === 'string' ? listing.address : '';
+          setListingAddress(savedAddress);
+          if (hasPin && !savedAddress) {
+            // Pins saved before addresses existed: resolve once, then cache on the listing.
+            reverseGeocode(Number(listing.lat), Number(listing.lng))
+              .then(address => {
+                if (!address) return;
+                setListingAddress(address);
+                updateDoc(doc(db, collectionName, currentUser.uid), { address }).catch(() => {});
+              })
+              .catch(() => {});
+          }
         }
       } catch (e) {
         console.error('Error loading profile:', e);
@@ -379,7 +395,7 @@ export default function Profile() {
                 {[
                   { icon: <Mail size={15} />, label: 'Email', value: currentUser?.email },
                   { icon: <Phone size={15} />, label: 'Phone', value: currentUser?.phone || 'Not provided' },
-                  { icon: <MapPin size={15} />, label: 'Location', value: currentUser?.location || (pinned ? 'Pinned on map' : 'Not set') },
+                  { icon: <MapPin size={15} />, label: 'Location', value: currentUser?.location || listingAddress || (pinned ? 'Pinned on map' : 'Not set') },
                 ].map(row => (
                   <div key={row.label} className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-0">
                     <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: C.bg, color: roleColor }}>

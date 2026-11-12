@@ -6,6 +6,7 @@ import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { Layout } from "../../components/Layout";
 import { db } from "../../firebase";
+import { reverseGeocode } from "../../geo";
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -73,8 +74,9 @@ export default function SetLocationPage({
         setMessage(`Hindi makita ang document mo sa "${collectionName}", kaya hindi na-save.`);
         return;
       }
-      await setDoc(ref, { lat: pos.lat, lng: pos.lng }, { merge: true });
-      setMessage("Na-save na ang lokasyon. Makikita na ito sa Map.");
+      const address = await reverseGeocode(pos.lat, pos.lng).catch(() => "");
+      await setDoc(ref, { lat: pos.lat, lng: pos.lng, ...(address ? { address } : {}) }, { merge: true });
+      setMessage(address ? `Na-save na: ${address}` : "Na-save na ang lokasyon. Makikita na ito sa Map.");
     } catch (e: any) {
       console.error(e);
       setMessage("Hindi na-save: " + (e?.message ?? "may error"));

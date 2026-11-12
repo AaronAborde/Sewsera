@@ -74,7 +74,7 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'reviews']);
       // the tailor pins their own shop on the map
       allow update: if signedIn() && request.auth.uid == id
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lat', 'lng'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lat', 'lng', 'address'])
         && request.resource.data.lat is number && request.resource.data.lng is number;
     }
 
@@ -107,7 +107,7 @@ service cloud.firestore {
       allow write: if isAdmin();
       // the seller pins their own shop on the map
       allow update: if signedIn() && request.auth.uid == id
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lat', 'lng'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lat', 'lng', 'address'])
         && request.resource.data.lat is number && request.resource.data.lng is number;
     }
 
