@@ -1,19 +1,18 @@
 // src/app/pages/shared/Messages.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { Send, ArrowLeft } from 'lucide-react';
 import { Layout } from '../../components/Layout';
 import { useApp } from '../../context/AppContext';
-import { db, auth } from '../../firebase';
+import { db } from '../../firebase';
 import {
   collection,
   query,
   where,
-  getDocs,
-  addDoc,
-  updateDoc,
-  doc,
   onSnapshot,
-  orderBy,
+  doc,
+  setDoc,
+  updateDoc,
   Timestamp,
 } from 'firebase/firestore';
 
@@ -22,106 +21,158 @@ const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', bg: '#F5F0E8' 
 interface Message {
   from: string;
   text: string;
-  time: Timestamp; // Changed from Date to Timestamp
+  time: Timestamp;
 }
 
 interface Conversation {
   id: string;
-  participants: string[];
-  participantNames: Record<string, string>;
-  participantAvatars: Record<string, string>;
-  participantRoles: Record<string, string>;
-  lastMessage: string;
-  lastMessageTime: Timestamp; // Changed from Date to Timestamp
-  unreadCount: Record<string, number>;
-  messages: Message[];
+  participants?: string[];
+  participantNames?: Record<string, string>;
+  participantAvatars?: Record<string, string>;
+  participantRoles?: Record<string, string>;
+  lastMessage?: string;
+  lastMessageTime?: Timestamp;
+  unreadCount?: Record<string, number>;
+  messages?: Message[];
 }
 
-// Helper to format timestamp to readable time
-const formatTime = (timestamp: Timestamp | null | undefined) => {
-  if (!timestamp) return '';
-  const date = timestamp.toDate();
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const formatTime = (timestamp?: Timestamp) => {
+  if (typeof timestamp?.toDate !== 'function') return '';
+  return timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
+
+const initial = (name: string) => (name.trim()[0] || '?').toUpperCase();
+
+const isImageUrl = (value: string) => /^(https?:\/\/|data:image\/)/.test(value);
+
+function Avatar({ value, name, role, size }: { value: string; name: string; role: string; size: string }) {
+  const background = role === 'tailor' ? C.primary : role === 'seller' ? C.teal : C.dark;
+  return (
+    <div
+      className={`${size} rounded-full flex items-center justify-center text-white text-sm overflow-hidden flex-shrink-0`}
+      style={{ background }}
+    >
+      {isImageUrl(value) ? (
+        <img src={value} alt="" className="w-full h-full object-cover" />
+      ) : (
+        value || initial(name)
+      )}
+    </div>
+  );
+}
 
 export default function Messages() {
   const { currentUser } = useApp();
+  const [searchParams] = useSearchParams();
+  const toId = searchParams.get('to');
+  const toName = searchParams.get('name');
+  const toRole = searchParams.get('role');
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const creatingRef = useRef(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Real-time listener for conversations
+  // Live inbox.
   useEffect(() => {
     if (!currentUser?.uid) return;
-
     const q = query(collection(db, 'conversations'), where('participants', 'array-contains', currentUser.uid));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const convs: Conversation[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        convs.push({ id: doc.id, ...data } as Conversation);
-      });
-      // Sort by lastMessageTime desc (using Timestamp comparison)
-      convs.sort((a, b) => {
-        const timeA = a.lastMessageTime?.toMillis?.() || 0;
-        const timeB = b.lastMessageTime?.toMillis?.() || 0;
-        return timeB - timeA;
-      });
-      setConversations(convs);
-      setLoading(false);
-    });
-
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const convs: Conversation[] = [];
+        snapshot.forEach((d) => convs.push({ id: d.id, ...d.data() } as Conversation));
+        convs.sort((a, b) => (b.lastMessageTime?.toMillis?.() || 0) - (a.lastMessageTime?.toMillis?.() || 0));
+        setConversations(convs);
+        setLoading(false);
+      },
+      (e) => {
+        console.error('Error loading conversations:', e);
+        setError('Could not load your messages.');
+        setLoading(false);
+      }
+    );
     return () => unsubscribe();
-  }, [currentUser]);
+  }, [currentUser?.uid]);
 
-  // When a conversation is selected, mark unread count to 0 for current user
+  // "Message" buttons link here with ?to=...; open that chat, creating it once if needed.
   useEffect(() => {
-    if (selectedConv && currentUser?.uid && selectedConv.unreadCount[currentUser.uid] > 0) {
-      const updateUnread = async () => {
-        const convRef = doc(db, 'conversations', selectedConv.id);
-        await updateDoc(convRef, {
-          [`unreadCount.${currentUser.uid}`]: 0,
-        });
-        // Update local state
-        setConversations(prev =>
-          prev.map(c =>
-            c.id === selectedConv.id
-              ? { ...c, unreadCount: { ...c.unreadCount, [currentUser.uid]: 0 } }
-              : c
-          )
-        );
-        setSelectedConv(prev => prev ? { ...prev, unreadCount: { ...prev.unreadCount, [currentUser.uid]: 0 } } : null);
-      };
-      updateUnread();
+    creatingRef.current = false;
+  }, [toId]);
+
+  useEffect(() => {
+    if (!currentUser?.uid || !toId || toId === currentUser.uid || loading) return;
+    const existing = conversations.find((c) => c.participants?.includes(toId));
+    if (existing) {
+      setSelectedId(existing.id);
+      return;
     }
-  }, [selectedConv, currentUser]);
+    if (creatingRef.current) return;
+    creatingRef.current = true;
+    const id = [currentUser.uid, toId].sort().join('_');
+    const meName = currentUser.name || 'User';
+    const otherName = toName || 'User';
+    setDoc(
+      doc(db, 'conversations', id),
+      {
+        participants: [currentUser.uid, toId].sort(),
+        participantNames: { [currentUser.uid]: meName, [toId]: otherName },
+        participantAvatars: { [currentUser.uid]: currentUser.avatarUrl || initial(meName), [toId]: initial(otherName) },
+        participantRoles: { [currentUser.uid]: currentUser.role, [toId]: toRole || 'customer' },
+        lastMessage: '',
+        lastMessageTime: Timestamp.now(),
+        unreadCount: { [currentUser.uid]: 0, [toId]: 0 },
+        messages: [],
+      },
+      { merge: true }
+    )
+      .then(() => setSelectedId(id))
+      .catch((e) => {
+        console.error('Error starting conversation:', e);
+        setError('Could not start the conversation. Please try again.');
+        creatingRef.current = false;
+      });
+  }, [currentUser, toId, toName, toRole, conversations, loading]);
+
+  const selected = conversations.find((c) => c.id === selectedId) || null;
+
+  // Opening a chat clears its unread badge.
+  const myUnread = Number(selected?.unreadCount?.[currentUser?.uid || '']) || 0;
+  useEffect(() => {
+    if (!selected || !currentUser?.uid || myUnread === 0) return;
+    updateDoc(doc(db, 'conversations', selected.id), {
+      [`unreadCount.${currentUser.uid}`]: 0,
+    }).catch((e) => console.error('Error clearing unread:', e));
+  }, [selected?.id, currentUser?.uid, myUnread]);
+
+  // Keep the newest message in view.
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: 'end' });
+  }, [selected?.messages?.length]);
 
   const sendMessage = async () => {
-    if (!inputText.trim() || !selectedConv || !currentUser?.uid) return;
-
-    const newMessage: Message = {
-      from: currentUser.uid,
-      text: inputText.trim(),
-      time: Timestamp.now(), // Use Timestamp.now()
-    };
-
-    // Update conversation
-    const convRef = doc(db, 'conversations', selectedConv.id);
-    const otherParticipant = selectedConv.participants.find(p => p !== currentUser.uid);
-    const newUnreadCount = { ...selectedConv.unreadCount };
-    if (otherParticipant) {
-      newUnreadCount[otherParticipant] = (newUnreadCount[otherParticipant] || 0) + 1;
+    if (!inputText.trim() || !selected || !currentUser?.uid) return;
+    const text = inputText.trim();
+    const otherId = selected.participants?.find((p) => p !== currentUser.uid);
+    if (!otherId) return;
+    try {
+      await updateDoc(doc(db, 'conversations', selected.id), {
+        messages: [
+          ...(selected.messages || []),
+          { from: currentUser.uid, text, time: Timestamp.now() },
+        ],
+        lastMessage: text,
+        lastMessageTime: Timestamp.now(),
+        unreadCount: { ...(selected.unreadCount || {}), [otherId]: (Number(selected.unreadCount?.[otherId]) || 0) + 1 },
+      });
+      setInputText('');
+      setError('');
+    } catch (e) {
+      console.error('Error sending message:', e);
+      setError('Message not sent. Please try again.');
     }
-
-    await updateDoc(convRef, {
-      messages: [...selectedConv.messages, newMessage],
-      lastMessage: newMessage.text,
-      lastMessageTime: Timestamp.now(),
-      unreadCount: newUnreadCount,
-    });
-
-    setInputText('');
   };
 
   const handleKey = (e: React.KeyboardEvent) => {
@@ -132,14 +183,20 @@ export default function Messages() {
   };
 
   const getOtherParticipant = (conv: Conversation) => {
-    const otherId = conv.participants.find(p => p !== currentUser?.uid);
+    const otherId = conv.participants?.find((p) => p !== currentUser?.uid);
     if (!otherId) return null;
+    const name = conv.participantNames?.[otherId] || 'User';
     return {
-      name: conv.participantNames[otherId] || 'User',
-      avatar: conv.participantAvatars[otherId] || otherId[0].toUpperCase(),
-      role: conv.participantRoles[otherId] || 'user',
+      name,
+      avatar: conv.participantAvatars?.[otherId] || initial(name),
+      role: conv.participantRoles?.[otherId] || 'customer',
     };
   };
+
+  const unreadTotal = conversations.reduce(
+    (sum, c) => sum + (Number(c.unreadCount?.[currentUser?.uid || '']) || 0),
+    0
+  );
 
   if (loading) {
     return (
@@ -155,32 +212,26 @@ export default function Messages() {
     <Layout title="Messages">
       <div className="flex h-[calc(100vh-114px)] md:h-[calc(100vh-64px)] overflow-hidden">
         {/* Inbox List */}
-        <div className={`${selectedConv ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-80 bg-white border-r border-gray-100`}>
+        <div className={`${selected ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-80 bg-white border-r border-gray-100`}>
           <div className="p-4 border-b border-gray-100">
             <h3 className="text-sm" style={{ color: C.dark }}>Messages</h3>
-            <p className="text-xs text-gray-400 mt-0.5">
-              {conversations.filter(c => c.unreadCount[currentUser?.uid || ''] > 0).length} unread
-            </p>
+            <p className="text-xs text-gray-400 mt-0.5">{unreadTotal} unread</p>
           </div>
           <div className="flex-1 overflow-y-auto">
+            {error && <p className="px-4 py-2 text-xs text-red-500">{error}</p>}
             {conversations.map(conv => {
               const other = getOtherParticipant(conv);
               if (!other) return null;
-              const unread = conv.unreadCount[currentUser?.uid || ''] || 0;
+              const unread = Number(conv.unreadCount?.[currentUser?.uid || '']) || 0;
               return (
                 <button
                   key={conv.id}
-                  onClick={() => setSelectedConv(conv)}
+                  onClick={() => setSelectedId(conv.id)}
                   className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors border-b border-gray-50 text-left"
-                  style={{ background: selectedConv?.id === conv.id ? '#FDF5F2' : undefined }}
+                  style={{ background: selected?.id === conv.id ? '#FDF5F2' : undefined }}
                 >
                   <div className="relative flex-shrink-0">
-                    <div
-                      className="w-11 h-11 rounded-full flex items-center justify-center text-white text-sm"
-                      style={{ background: other.role === 'tailor' ? C.primary : other.role === 'seller' ? C.teal : C.dark }}
-                    >
-                      {other.avatar}
-                    </div>
+                    <Avatar value={other.avatar} name={other.name} role={other.role} size="w-11 h-11" />
                     {unread > 0 && (
                       <div
                         className="absolute -top-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs"
@@ -197,7 +248,7 @@ export default function Messages() {
                         {formatTime(conv.lastMessageTime)}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-400 truncate">{conv.lastMessage}</p>
+                    <p className="text-xs text-gray-400 truncate">{conv.lastMessage || 'No messages yet'}</p>
                     <span
                       className="text-xs px-1.5 py-0.5 rounded mt-0.5 inline-block"
                       style={{
@@ -212,47 +263,45 @@ export default function Messages() {
               );
             })}
             {conversations.length === 0 && (
-              <div className="text-center py-12 text-gray-400">
+              <div className="text-center py-12 text-gray-400 px-6">
                 <Send size={32} className="mx-auto mb-3 opacity-40" />
                 <p className="text-sm">No messages yet.</p>
+                <p className="text-xs mt-1">Open a shop or tailor profile and tap Message to start a chat.</p>
               </div>
             )}
           </div>
         </div>
 
         {/* Chat View */}
-        {selectedConv ? (
+        {selected ? (
           <div className="flex-1 flex flex-col bg-white md:bg-gray-50">
-            {/* Chat Header */}
             <div className="flex items-center gap-3 p-4 bg-white border-b border-gray-100">
-              <button onClick={() => setSelectedConv(null)} className="md:hidden p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+              <button onClick={() => setSelectedId(null)} className="md:hidden p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
                 <ArrowLeft size={18} style={{ color: C.dark }} />
               </button>
               {(() => {
-                const other = getOtherParticipant(selectedConv);
+                const other = getOtherParticipant(selected);
                 if (!other) return null;
                 return (
                   <>
-                    <div
-                      className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm"
-                      style={{ background: other.role === 'tailor' ? C.primary : other.role === 'seller' ? C.teal : C.dark }}
-                    >
-                      {other.avatar}
-                    </div>
+                    <Avatar value={other.avatar} name={other.name} role={other.role} size="w-9 h-9" />
                     <div>
                       <p className="text-sm" style={{ color: C.dark }}>{other.name}</p>
-                      <p className="text-xs text-green-500">Online</p>
+                      <p className="text-xs text-gray-400">
+                        {other.role === 'tailor' ? 'Tailor' : other.role === 'seller' ? 'Seller' : 'Customer'}
+                      </p>
                     </div>
                   </>
                 );
               })()}
             </div>
 
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {selectedConv.messages.map((msg, idx) => {
+              {(selected.messages || []).length === 0 && (
+                <p className="text-center text-xs text-gray-400 py-8">No messages yet. Say hello 👋</p>
+              )}
+              {(selected.messages || []).map((msg, idx) => {
                 const isMe = msg.from === currentUser?.uid;
-                const senderName = isMe ? 'You' : getOtherParticipant(selectedConv)?.name || 'User';
                 return (
                   <div key={idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                     <div
@@ -264,17 +313,17 @@ export default function Messages() {
                         boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
                       }}
                     >
-                      <p className="leading-relaxed">{msg.text}</p>
-                      <p className="text-xs mt-1 opacity-60">
-                        {formatTime(msg.time)}
-                      </p>
+                      <p className="leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                      <p className="text-xs mt-1 opacity-60">{formatTime(msg.time)}</p>
                     </div>
                   </div>
                 );
               })}
+              <div ref={bottomRef} />
             </div>
 
-            {/* Input */}
+            {error && <p className="px-4 py-1 text-xs text-red-500 bg-white border-t border-gray-100">{error}</p>}
+
             <div className="p-4 bg-white border-t border-gray-100">
               <div className="flex items-center gap-2">
                 <input
@@ -288,6 +337,7 @@ export default function Messages() {
                 <button
                   onClick={sendMessage}
                   disabled={!inputText.trim()}
+                  aria-label="Send message"
                   className="w-10 h-10 rounded-full flex items-center justify-center text-white disabled:opacity-50 hover:opacity-90 transition-opacity"
                   style={{ background: C.primary }}
                 >

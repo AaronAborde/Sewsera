@@ -33,7 +33,7 @@ service cloud.firestore {
           && request.resource.data.role == resource.data.role
           // can only touch these fields
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-               'name', 'phone', 'location', 'avatarUrl', 'notifications', 'emailAlerts',
+               'name', 'phone', 'location', 'avatarUrl', 'coverUrl', 'notifications', 'emailAlerts',
                'status', 'documentsSubmitted', 'documentIds', 'submittedAt', 'emailVerified'
              ])
           // status: the only allowed change is back to "pending" (resubmitting documents)
@@ -71,19 +71,34 @@ service cloud.firestore {
       allow write: if isAdmin();
       // customers' reviews update the average rating + review count
       allow update: if signedIn()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'reviews']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'reviews'])
+        && request.resource.data.rating is number
+        && request.resource.data.rating >= 0 && request.resource.data.rating <= 5
+        && request.resource.data.reviews is int
+        && request.resource.data.reviews >= 0;
+      // the tailor pins their own shop on the map
+      allow update: if signedIn() && request.auth.uid == id
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lat', 'lng', 'address'])
+        && request.resource.data.lat is number && request.resource.data.lng is number;
     }
 
-    // Reviews of tailors / fabrics: one per customer per target (document id is fixed)
+    // Reviews of tailors / fabrics: one per customer per target (document id is fixed).
+    // The id must be <type>_<targetId>_<customerId> so a review cannot be filed under another target.
     match /reviews/{id} {
       allow read: if signedIn();
       allow create: if signedIn()
         && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.type in ['tailor', 'fabric']
+        && id.split('_')[0] == request.resource.data.type
+        && id.split('_')[1] == request.resource.data.targetId
         && request.resource.data.rating is int
         && request.resource.data.rating >= 1 && request.resource.data.rating <= 5;
       allow update: if signedIn()
         && resource.data.customerId == request.auth.uid
         && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.type in ['tailor', 'fabric']
+        && id.split('_')[0] == request.resource.data.type
+        && id.split('_')[1] == request.resource.data.targetId
         && request.resource.data.rating is int
         && request.resource.data.rating >= 1 && request.resource.data.rating <= 5;
       allow delete: if signedIn() && (resource.data.customerId == request.auth.uid || isAdmin());
@@ -101,6 +116,10 @@ service cloud.firestore {
     match /sellers/{id} {
       allow read: if signedIn();
       allow write: if isAdmin();
+      // the seller pins their own shop on the map
+      allow update: if signedIn() && request.auth.uid == id
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lat', 'lng', 'address'])
+        && request.resource.data.lat is number && request.resource.data.lng is number;
     }
 
     // ---------------------------------------------------------------
@@ -108,11 +127,33 @@ service cloud.firestore {
     // TEMPORARY: any signed-in user can read/write. Tighten these later
     // (e.g. only the owner can write their own booking / shop).
     // ---------------------------------------------------------------
-    match /inventory/{path=**}     { allow read, write: if signedIn(); }
+    // Sellers manage their own inventory; everyone signed in can browse it.
+    match /inventory/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && (isAdmin() || request.resource.data.sellerId == request.auth.uid);
+      allow update, delete: if signedIn()
+        && (isAdmin() || resource.data.sellerId == request.auth.uid);
+    }
     match /shops/{path=**}         { allow read, write: if signedIn(); }
     match /portfolio/{path=**}     { allow read, write: if signedIn(); }
     match /appointments/{path=**}  { allow read, write: if signedIn(); }
-    match /bookings/{path=**}      { allow read, write: if signedIn(); }
+    // Bookings are created by the customer and visible only to that customer, their tailor and admins.
+    match /bookings/{id} {
+      allow read: if signedIn()
+        && (resource.data.customerId == request.auth.uid
+            || resource.data.tailorId == request.auth.uid
+            || isAdmin());
+      allow create: if signedIn()
+        && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update: if signedIn()
+        && (resource.data.customerId == request.auth.uid
+            || resource.data.tailorId == request.auth.uid
+            || isAdmin());
+      allow delete: if signedIn()
+        && (resource.data.customerId == request.auth.uid || isAdmin());
+    }
     match /jobs/{path=**}          { allow read, write: if signedIn(); }
 
     // Orders are created ONLY by the payment server (Admin SDK) after a verified payment.
@@ -137,6 +178,10 @@ service cloud.firestore {
         || (signedIn()
           && (resource.data.customerId == request.auth.uid || resource.data.sellerId == request.auth.uid));
       allow update, delete: if isAdmin();
+      // the seller moves their own fabric order along the delivery pipeline
+      allow update: if signedIn()
+        && resource.data.sellerId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
     }
 
     match /fabrics/{path=**}       { allow read, write: if signedIn(); }

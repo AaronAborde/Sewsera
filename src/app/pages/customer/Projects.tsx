@@ -9,14 +9,13 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 
 const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', bg: '#F5F0E8' };
 
-// ✅ Fixed: use React.ReactNode instead of JSX.Element
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
   in_progress: { label: 'In Progress', color: C.teal, bg: '#E8F8F6', icon: <Loader2 size={13} className="animate-spin" /> },
   pending: { label: 'Pending', color: '#F59E0B', bg: '#FFFBEB', icon: <Clock size={13} /> },
   completed: { label: 'Completed', color: '#10B981', bg: '#ECFDF5', icon: <CheckCircle size={13} /> },
 };
 
-interface Project {
+interface Order {
   id: string;
   service: string;
   tailor: string;
@@ -27,45 +26,48 @@ interface Project {
   paid: boolean;
 }
 
-export default function Projects() {
+// Live bookings exist in two shapes: newer docs use service/price,
+// older ones use description/amount.
+const toOrder = (id: string, d: any): Order => ({
+  id,
+  service: d.service || d.description || d.serviceType || 'Custom order',
+  tailor: d.tailorName || d.tailor || 'Tailor',
+  status: d.status || 'pending',
+  progress: Number(d.progress) || 0,
+  deadline: d.deadline?.toDate ? d.deadline.toDate().toLocaleDateString() : d.deadline || 'TBD',
+  amount: Number(d.price ?? d.amount) || 0,
+  paid: Number(d.downpayment) > 0 || d.paymentStatus === 'paid',
+});
+
+export default function CustomerOrders() {
   const navigate = useNavigate();
   const { currentUser } = useApp();
   const [filter, setFilter] = useState<'all' | 'in_progress' | 'pending' | 'completed'>('all');
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [paymentProject, setPaymentProject] = useState<Project | null>(null);
+  const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
 
   useEffect(() => {
     if (!currentUser?.uid) return;
-    const fetchProjects = async () => {
+    const fetchOrders = async () => {
       try {
         const bookingsQuery = query(collection(db, 'bookings'), where('customerId', '==', currentUser.uid));
         const bookingsSnap = await getDocs(bookingsQuery);
-        const projectList = bookingsSnap.docs.map(doc => ({
-          id: doc.id,
-          service: doc.data().service,
-          tailor: doc.data().tailorName,
-          status: doc.data().status || 'pending',
-          progress: doc.data().progress || 0,
-          deadline: doc.data().deadline || 'TBD',
-          amount: doc.data().price,
-          paid: doc.data().downpayment > 0,
-        } as Project));
-        setProjects(projectList);
+        setOrders(bookingsSnap.docs.map(doc => toOrder(doc.id, doc.data())));
       } catch (error) {
-        console.error("Error fetching projects:", error);
+        console.error("Error fetching orders:", error);
       } finally {
         setLoading(false);
       }
     };
-    fetchProjects();
+    fetchOrders();
   }, [currentUser]);
 
-  const filtered = projects.filter(p => filter === 'all' || p.status === filter);
+  const filtered = orders.filter(o => filter === 'all' || o.status === filter);
 
   if (loading) {
     return (
-      <Layout title="My Projects">
+      <Layout title="My Orders">
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
@@ -74,13 +76,13 @@ export default function Projects() {
   }
 
   return (
-    <Layout title="My Projects">
+    <Layout title="My Orders">
       <div className="max-w-xl mx-auto md:max-w-3xl px-4 md:px-8 py-5">
         <div className="flex gap-2 overflow-x-auto pb-1 mb-5 no-scrollbar">
           {(['all', 'in_progress', 'pending', 'completed'] as const).map(f => (
             <button key={f} onClick={() => setFilter(f)} className="flex-shrink-0 px-4 py-1.5 rounded-full text-xs border transition-all"
               style={{ background: filter === f ? C.dark : 'white', color: filter === f ? 'white' : '#6B7280', borderColor: filter === f ? C.dark : '#E5E7EB' }}>
-              {f === 'all' ? 'All Projects' : f === 'in_progress' ? 'In Progress' : f === 'pending' ? 'Pending' : 'Completed'}
+              {f === 'all' ? 'All Orders' : f === 'in_progress' ? 'In Progress' : f === 'pending' ? 'Pending' : 'Completed'}
             </button>
           ))}
         </div>
@@ -112,15 +114,15 @@ export default function Projects() {
 
                   <div className="flex items-center justify-between text-xs text-gray-400 mb-3">
                     <span>Due: {p.deadline}</span>
-                    <span className="text-sm" style={{ color: C.dark }}>₱{p.amount.toLocaleString()}</span>
+                    <span className="text-sm" style={{ color: C.dark }}>{p.amount > 0 ? `₱${p.amount.toLocaleString()}` : 'To be quoted'}</span>
                   </div>
 
                   <div className="flex gap-2">
                     <button onClick={() => navigate('/customer/messages')} className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-xs transition-colors hover:bg-gray-50" style={{ color: C.dark }}>
                       <MessageSquare size={13} /> Message Tailor
                     </button>
-                    {!p.paid && p.status !== 'completed' && (
-                      <button onClick={() => setPaymentProject(p)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs hover:opacity-90 transition-opacity" style={{ background: C.primary }}>
+                    {!p.paid && p.status !== 'completed' && p.amount > 0 && (
+                      <button onClick={() => setPaymentOrder(p)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs hover:opacity-90 transition-opacity" style={{ background: C.primary }}>
                         <CreditCard size={13} /> Pay Balance
                       </button>
                     )}
@@ -133,13 +135,13 @@ export default function Projects() {
             );
           })}
           {filtered.length === 0 && (
-            <div className="text-center py-16 text-gray-400"><Clock size={36} className="mx-auto mb-3 opacity-40" /><p className="text-sm">No projects yet.</p><button onClick={() => navigate('/customer/discover')} className="mt-3 text-sm hover:underline" style={{ color: C.primary }}>Book a Tailor</button></div>
+            <div className="text-center py-16 text-gray-400"><Clock size={36} className="mx-auto mb-3 opacity-40" /><p className="text-sm">No orders yet.</p><button onClick={() => navigate('/customer/discover')} className="mt-3 text-sm hover:underline" style={{ color: C.primary }}>Book a Tailor</button></div>
           )}
         </div>
       </div>
 
-      {paymentProject && (
-        <PaymentModal isOpen={!!paymentProject} onClose={() => setPaymentProject(null)} amount={paymentProject.amount} description={`Balance — ${paymentProject.service}`} onSuccess={() => setPaymentProject(null)} />
+      {paymentOrder && (
+        <PaymentModal isOpen={!!paymentOrder} onClose={() => setPaymentOrder(null)} amount={paymentOrder.amount} description={`Balance — ${paymentOrder.service}`} onSuccess={() => setPaymentOrder(null)} />
       )}
     </Layout>
   );

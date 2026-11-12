@@ -1,9 +1,10 @@
 // src/app/pages/customer/TailorProfile.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ArrowLeft, Star, MapPin, Clock, CheckCircle, Scissors, MessageSquare, Calendar } from 'lucide-react';
+import { ArrowLeft, Star, MapPin, Clock, MessageSquare, Calendar } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
 import { db } from '../../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, setDoc, Timestamp, updateDoc, where } from 'firebase/firestore';
 
 const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', gold: '#C89558', bg: '#F5F0E8' };
 
@@ -25,29 +26,52 @@ interface Tailor {
   portfolio: string[];
 }
 
-const REVIEWS = [
-  { name: 'Maria S.', rating: 5, date: 'March 2026', comment: 'Absolutely stunning Barong! Perfect fit and impeccable craftsmanship. Will definitely order again.' },
-  { name: 'Carlo M.', rating: 5, date: 'February 2026', comment: 'Professional and punctual. Delivered my suit ahead of schedule. Highly recommended!' },
-  { name: 'Sofia R.', rating: 4, date: 'January 2026', comment: 'Beautiful work. Just needed minor adjustments but overall very pleased.' },
-];
+interface Review {
+  id: string;
+  customerId: string;
+  customerName: string;
+  rating: number;
+  comment: string;
+  createdAt?: any;
+}
+
+const formatDate = (v: any) => (v?.toDate ? v.toDate().toLocaleDateString() : '');
 
 export default function TailorProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { currentUser, userRole } = useApp();
   const [tailor, setTailor] = useState<Tailor | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'about' | 'portfolio' | 'reviews'>('about');
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const [savingReview, setSavingReview] = useState(false);
+  const [reviewError, setReviewError] = useState('');
 
   useEffect(() => {
-    const fetchTailor = async () => {
+    const fetchData = async () => {
       if (!id) return;
       try {
-        const tailorRef = doc(db, 'tailors', id);
-        const tailorSnap = await getDoc(tailorRef);
-        if (tailorSnap.exists()) {
-          setTailor({ id: tailorSnap.id, ...tailorSnap.data() } as Tailor);
-        } else {
+        const [tailorSnap, reviewsSnap] = await Promise.all([
+          getDoc(doc(db, 'tailors', id)),
+          getDocs(query(collection(db, 'reviews'), where('targetId', '==', id))),
+        ]);
+        if (!tailorSnap.exists()) {
           navigate('/customer/discover');
+          return;
+        }
+        setTailor({ id: tailorSnap.id, ...tailorSnap.data() } as Tailor);
+        const list = reviewsSnap.docs
+          .map(d => ({ id: d.id, ...d.data() } as Review))
+          .filter(r => (r as any).type === 'tailor')
+          .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+        setReviews(list);
+        const mine = list.find(r => r.customerId === currentUser?.uid);
+        if (mine) {
+          setRating(mine.rating);
+          setComment(mine.comment || '');
         }
       } catch (error) {
         console.error("Error fetching tailor:", error);
@@ -55,8 +79,45 @@ export default function TailorProfile() {
         setLoading(false);
       }
     };
-    fetchTailor();
-  }, [id, navigate]);
+    fetchData();
+  }, [id, navigate, currentUser?.uid]);
+
+  const submitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !id) return;
+    if (!rating) {
+      setReviewError('Pick a star rating first.');
+      return;
+    }
+    setReviewError('');
+    setSavingReview(true);
+    try {
+      const reviewId = `tailor_${id}_${currentUser.uid}`;
+      const mine = {
+        customerId: currentUser.uid,
+        customerName: currentUser.name || 'Customer',
+        targetId: id,
+        type: 'tailor',
+        rating,
+        comment: comment.trim(),
+        createdAt: Timestamp.now(),
+      };
+      await setDoc(doc(db, 'reviews', reviewId), mine);
+
+      const next = [...reviews.filter(r => r.customerId !== currentUser.uid), { id: reviewId, ...mine }];
+      const avg = next.reduce((sum, r) => sum + r.rating, 0) / next.length;
+      const rounded = Math.round(avg * 10) / 10;
+      await updateDoc(doc(db, 'tailors', id), { rating: rounded, reviews: next.length });
+
+      setReviews(next);
+      setTailor(t => (t ? { ...t, rating: rounded, reviews: next.length } : t));
+    } catch (error) {
+      console.error("Error saving review:", error);
+      setReviewError('Could not save your review. Please try again.');
+    } finally {
+      setSavingReview(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -68,6 +129,17 @@ export default function TailorProfile() {
 
   if (!tailor) return null;
 
+  const reviewCount = reviews.length || Number(tailor.reviews) || 0;
+  const ratingValue = reviews.length
+    ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
+    : Number(tailor.rating) || 0;
+  const distribution = [5, 4, 3, 2, 1].map(star => ({
+    star,
+    pct: reviews.length ? Math.round((reviews.filter(r => r.rating === star).length / reviews.length) * 100) : 0,
+  }));
+
+  const goBack = () => (window.history.state?.idx > 0 ? navigate(-1) : navigate('/customer/discover'));
+
   return (
     <div className="min-h-screen" style={{ background: C.bg, fontFamily: "'Inter', sans-serif" }}>
       <div className="relative">
@@ -75,7 +147,7 @@ export default function TailorProfile() {
           <img src={tailor.image} alt={tailor.name} className="w-full h-full object-cover" />
           <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(26,43,60,0.85) 100%)' }} />
         </div>
-        <button onClick={() => navigate(-1)} className="absolute top-4 left-4 p-2 rounded-xl bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 transition-colors"><ArrowLeft size={18} /></button>
+        <button onClick={goBack} className="absolute top-4 left-4 p-2 rounded-xl bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 transition-colors"><ArrowLeft size={18} /></button>
         <div className="absolute bottom-0 left-0 right-0 p-5">
           <div className="flex items-end justify-between">
             <div>
@@ -88,8 +160,8 @@ export default function TailorProfile() {
             <div className="flex flex-col items-end gap-1">
               <div className="flex items-center gap-1 bg-white/20 backdrop-blur-sm px-2.5 py-1 rounded-lg">
                 <Star size={13} className="fill-yellow-400 text-yellow-400" />
-                <span className="text-white text-sm">{tailor.rating}</span>
-                <span className="text-white/60 text-xs">({tailor.reviews})</span>
+                <span className="text-white text-sm">{ratingValue}</span>
+                <span className="text-white/60 text-xs">({reviewCount})</span>
               </div>
             </div>
           </div>
@@ -99,17 +171,19 @@ export default function TailorProfile() {
       <div className="max-w-xl mx-auto md:max-w-3xl px-4 md:px-8">
         <div className="bg-white rounded-2xl shadow-sm -mt-4 mb-5 p-4 grid grid-cols-3 divide-x divide-gray-100">
           {[
-            { label: 'Experience', value: tailor.experience },
-            { label: 'Completed', value: tailor.completedOrders + '+' },
-            { label: 'Response', value: tailor.responseTime },
+            { label: 'Experience', value: tailor.experience || '-' },
+            { label: 'Completed', value: `${tailor.completedOrders || 0}+` },
+            { label: 'Response', value: tailor.responseTime || '-' },
           ].map(s => (
             <div key={s.label} className="text-center px-2"><p className="text-base" style={{ color: C.dark }}>{s.value}</p><p className="text-xs text-gray-400">{s.label}</p></div>
           ))}
         </div>
 
         <div className="flex flex-wrap gap-3 mb-5">
-          <div className="flex items-center gap-1.5 bg-white px-3 py-2 rounded-xl shadow-sm text-sm text-gray-500"><MapPin size={14} style={{ color: C.primary }} /> {tailor.location}</div>
-          <div className="flex items-center gap-1.5 bg-white px-3 py-2 rounded-xl shadow-sm text-sm text-gray-500"><Clock size={14} style={{ color: C.teal }} /> Responds {tailor.responseTime}</div>
+          {tailor.location && (
+            <div className="flex items-center gap-1.5 bg-white px-3 py-2 rounded-xl shadow-sm text-sm text-gray-500"><MapPin size={14} style={{ color: C.primary }} /> {tailor.location}</div>
+          )}
+          <div className="flex items-center gap-1.5 bg-white px-3 py-2 rounded-xl shadow-sm text-sm text-gray-500"><Clock size={14} style={{ color: C.teal }} /> Responds {tailor.responseTime || '-'}</div>
         </div>
 
         <div className="flex gap-1 p-1 bg-white rounded-xl mb-5 shadow-sm w-fit">
@@ -122,25 +196,81 @@ export default function TailorProfile() {
 
         {activeTab === 'about' && (
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl p-4 shadow-sm"><h3 className="mb-2" style={{ color: C.dark }}>About</h3><p className="text-sm text-gray-500 leading-relaxed">{tailor.about}</p></div>
-            <div className="bg-white rounded-2xl p-4 shadow-sm"><h3 className="mb-3" style={{ color: C.dark }}>Specializations</h3><div className="flex flex-wrap gap-2">{tailor.tags.map(tag => (<span key={tag} className="px-3 py-1.5 rounded-full text-xs text-white" style={{ background: C.primary }}>{tag}</span>))}</div></div>
-            <div className="bg-white rounded-2xl p-4 shadow-sm"><h3 className="mb-3" style={{ color: C.dark }}>Starting Price</h3><p className="text-xl" style={{ color: C.primary }}>{tailor.price}</p><p className="text-xs text-gray-400 mt-0.5">Prices vary based on garment complexity and fabric choice.</p></div>
+            <div className="bg-white rounded-2xl p-4 shadow-sm"><h3 className="mb-2" style={{ color: C.dark }}>About</h3><p className="text-sm text-gray-500 leading-relaxed">{tailor.about || 'This tailor has not added a description yet.'}</p></div>
+            <div className="bg-white rounded-2xl p-4 shadow-sm"><h3 className="mb-3" style={{ color: C.dark }}>Specializations</h3><div className="flex flex-wrap gap-2">{(tailor.tags || []).map(tag => (<span key={tag} className="px-3 py-1.5 rounded-full text-xs text-white" style={{ background: C.primary }}>{tag}</span>))}</div></div>
+            <div className="bg-white rounded-2xl p-4 shadow-sm"><h3 className="mb-3" style={{ color: C.dark }}>Starting Price</h3><p className="text-xl" style={{ color: C.primary }}>{tailor.price || 'Contact for quote'}</p><p className="text-xs text-gray-400 mt-0.5">Prices vary based on garment complexity and fabric choice.</p></div>
           </div>
         )}
 
         {activeTab === 'portfolio' && (
           <div className="grid grid-cols-3 gap-2">
-            {tailor.portfolio.map((img, i) => (<div key={i} className="aspect-square rounded-xl overflow-hidden"><img src={img} alt={`Portfolio ${i + 1}`} className="w-full h-full object-cover" /></div>))}
+            {(tailor.portfolio || []).map((img, i) => (<div key={i} className="aspect-square rounded-xl overflow-hidden"><img src={img} alt={`Portfolio ${i + 1}`} className="w-full h-full object-cover" /></div>))}
+            {(!tailor.portfolio || tailor.portfolio.length === 0) && (
+              <p className="col-span-3 text-sm text-gray-400 py-8 text-center">No portfolio photos yet.</p>
+            )}
           </div>
         )}
 
         {activeTab === 'reviews' && (
           <div className="space-y-3">
             <div className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-4">
-              <div className="text-center"><p className="text-4xl" style={{ color: C.dark, fontFamily: "'Playfair Display', serif" }}>{tailor.rating}</p><div className="flex gap-0.5 justify-center mt-1">{[...Array(5)].map((_, i) => <Star key={i} size={12} className="fill-yellow-400 text-yellow-400" />)}</div><p className="text-xs text-gray-400 mt-0.5">{tailor.reviews} reviews</p></div>
-              <div className="flex-1 space-y-1.5">{...[5,4,3,2,1].map(star => (<div key={star} className="flex items-center gap-2"><span className="text-xs text-gray-400 w-3">{star}</span><div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ background: C.gold, width: star === 5 ? '75%' : star === 4 ? '18%' : '5%' }} /></div></div>))}</div>
+              <div className="text-center">
+                <p className="text-4xl" style={{ color: C.dark, fontFamily: "'Playfair Display', serif" }}>{ratingValue}</p>
+                <div className="flex gap-0.5 justify-center mt-1">{[...Array(5)].map((_, i) => <Star key={i} size={12} className="fill-yellow-400 text-yellow-400" />)}</div>
+                <p className="text-xs text-gray-400 mt-0.5">{reviewCount} reviews</p>
+              </div>
+              <div className="flex-1 space-y-1.5">
+                {distribution.map(({ star, pct }) => (
+                  <div key={star} className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400 w-3">{star}</span>
+                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ background: C.gold, width: `${pct}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            {REVIEWS.map((r, i) => (<div key={i} className="bg-white rounded-2xl p-4 shadow-sm"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs" style={{ background: C.dark }}>{r.name[0]}</div><div><p className="text-sm" style={{ color: C.dark }}>{r.name}</p><p className="text-xs text-gray-400">{r.date}</p></div></div><div className="flex gap-0.5">{[...Array(r.rating)].map((_, j) => <Star key={j} size={11} className="fill-yellow-400 text-yellow-400" />)}</div></div><p className="text-sm text-gray-500 leading-relaxed">{r.comment}</p></div>))}
+
+            {userRole === 'customer' && (
+              <form onSubmit={submitReview} className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
+                <h3 style={{ color: C.dark }}>{reviews.some(r => r.customerId === currentUser?.uid) ? 'Update Your Review' : 'Write a Review'}</h3>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map(s => (
+                    <button key={s} type="button" onClick={() => setRating(s)} aria-label={`${s} star${s > 1 ? 's' : ''}`} className="p-0.5">
+                      <Star size={22} className={s <= rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'} />
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  rows={3}
+                  placeholder="Share your experience…"
+                  value={comment}
+                  onChange={e => setComment(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:border-transparent transition-all resize-none"
+                />
+                {reviewError && <p className="text-xs text-red-500">{reviewError}</p>}
+                <button type="submit" disabled={savingReview} className="w-full py-2.5 rounded-xl text-white text-sm hover:opacity-90 transition-opacity disabled:opacity-60" style={{ background: C.primary }}>
+                  {savingReview ? 'Saving…' : 'Submit Review'}
+                </button>
+              </form>
+            )}
+
+            {reviews.map(r => (
+              <div key={r.id} className="bg-white rounded-2xl p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs" style={{ background: C.dark }}>{(r.customerName || 'C')[0]}</div>
+                    <div><p className="text-sm" style={{ color: C.dark }}>{r.customerName}</p><p className="text-xs text-gray-400">{formatDate(r.createdAt)}</p></div>
+                  </div>
+                  <div className="flex gap-0.5">{[...Array(r.rating)].map((_, j) => <Star key={j} size={11} className="fill-yellow-400 text-yellow-400" />)}</div>
+                </div>
+                {r.comment && <p className="text-sm text-gray-500 leading-relaxed">{r.comment}</p>}
+              </div>
+            ))}
+
+            {reviews.length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-6">No reviews yet. Be the first to review.</p>
+            )}
           </div>
         )}
 
@@ -148,7 +278,7 @@ export default function TailorProfile() {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-100 p-4 flex gap-3 md:max-w-xl md:mx-auto">
-        <button onClick={() => navigate('/customer/messages')} className="flex items-center gap-2 px-4 py-3 rounded-xl border border-gray-200 text-sm transition-colors hover:bg-gray-50" style={{ color: C.dark }}><MessageSquare size={16} /> Message</button>
+        <button onClick={() => navigate(`/customer/messages?to=${tailor.id}&name=${encodeURIComponent(tailor.name)}&role=tailor`)} className="flex items-center gap-2 px-4 py-3 rounded-xl border border-gray-200 text-sm transition-colors hover:bg-gray-50" style={{ color: C.dark }}><MessageSquare size={16} /> Message</button>
         <button onClick={() => navigate(`/customer/booking?tailor=${tailor.id}`)} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm hover:opacity-90 transition-opacity" style={{ background: C.primary }}><Calendar size={16} /> Book Appointment</button>
       </div>
     </div>

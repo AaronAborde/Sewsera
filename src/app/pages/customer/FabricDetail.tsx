@@ -1,7 +1,7 @@
 // src/app/pages/customer/FabricDetail.tsx
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ArrowLeft, Star, MapPin, ShoppingCart, Minus, Plus, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Star, MapPin, ShoppingCart, Minus, Plus, CheckCircle, MessageSquare } from 'lucide-react';
 import { PaymentModal } from '../../components/PaymentModal';
 import { useApp } from '../../context/AppContext';
 import { db } from '../../firebase';
@@ -42,15 +42,38 @@ export default function FabricDetail() {
     const fetchFabric = async () => {
       if (!id) return;
       try {
-        const fabricRef = doc(db, 'fabrics', id);
-        const fabricSnap = await getDoc(fabricRef);
-        if (fabricSnap.exists()) {
-          const data = { id: fabricSnap.id, ...fabricSnap.data() } as Fabric;
-          setFabric(data);
-          setSelectedColor(data.colors[0] || '');
-        } else {
+        // Sellers list stock in "inventory"; "fabrics" only holds a few legacy docs.
+        let snap = await getDoc(doc(db, 'inventory', id));
+        if (!snap.exists()) snap = await getDoc(doc(db, 'fabrics', id));
+        if (!snap.exists()) {
           navigate('/customer/discover');
+          return;
         }
+        const data: any = snap.data();
+        let seller = data.seller || '';
+        if (!seller && data.sellerId) {
+          const shopSnap = await getDoc(doc(db, 'shops', data.sellerId));
+          if (shopSnap.exists()) seller = shopSnap.data().shopName || '';
+        }
+        const mapped: Fabric = {
+          id: snap.id,
+          name: data.name || 'Fabric',
+          seller: seller || 'Fabric Seller',
+          price: Number(data.price) || 0,
+          unit: data.unit || 'm',
+          image: data.imageUrl || data.image || '',
+          category: data.category || 'Fabric',
+          description: data.description || '',
+          colors: Array.isArray(data.colors) ? data.colors : [],
+          tags: Array.isArray(data.tags) ? data.tags : [],
+          stock: Number(data.stock) || 0,
+          rating: Number(data.rating) || 0,
+          reviews: Number(data.reviews) || 0,
+          location: data.location || '',
+          sellerId: data.sellerId || '',
+        };
+        setFabric(mapped);
+        setSelectedColor(mapped.colors[0] || '');
       } catch (error) {
         console.error("Error fetching fabric:", error);
       } finally {
@@ -114,9 +137,15 @@ export default function FabricDetail() {
     <div className="min-h-screen" style={{ background: C.bg, fontFamily: "'Inter', sans-serif" }}>
       <div className="relative">
         <div className="h-72 overflow-hidden">
-          <img src={fabric.image} alt={fabric.name} className="w-full h-full object-cover" />
+          {fabric.image ? (
+            <img src={fabric.image} alt={fabric.name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center" style={{ background: '#E5E7EB' }}>
+              <ShoppingCart size={40} className="text-gray-400" />
+            </div>
+          )}
         </div>
-        <button onClick={() => navigate(-1)} className="absolute top-4 left-4 p-2.5 rounded-xl bg-white/90 backdrop-blur-sm shadow-sm hover:bg-white transition-colors">
+        <button onClick={() => (window.history.state?.idx > 0 ? navigate(-1) : navigate('/customer/discover'))} className="absolute top-4 left-4 p-2.5 rounded-xl bg-white/90 backdrop-blur-sm shadow-sm hover:bg-white transition-colors">
           <ArrowLeft size={18} style={{ color: C.dark }} />
         </button>
         <div className="absolute top-4 right-4 px-2.5 py-1 rounded-full text-xs text-white" style={{ background: C.teal }}>
@@ -129,15 +158,19 @@ export default function FabricDetail() {
           <h1 className="text-xl mb-1" style={{ color: C.dark, fontFamily: "'Playfair Display', serif" }}>{fabric.name}</h1>
           <p className="text-sm text-gray-400 mb-3">{fabric.seller}</p>
           <div className="flex items-center gap-4 mb-3">
-            <div className="flex items-center gap-1">
-              <Star size={13} className="fill-yellow-400 text-yellow-400" />
-              <span className="text-sm text-gray-600">{fabric.rating}</span>
-              <span className="text-xs text-gray-400">({fabric.reviews} reviews)</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <MapPin size={12} className="text-gray-400" />
-              <span className="text-xs text-gray-400">{fabric.location}</span>
-            </div>
+            {fabric.reviews > 0 && (
+              <div className="flex items-center gap-1">
+                <Star size={13} className="fill-yellow-400 text-yellow-400" />
+                <span className="text-sm text-gray-600">{fabric.rating}</span>
+                <span className="text-xs text-gray-400">({fabric.reviews} reviews)</span>
+              </div>
+            )}
+            {fabric.location && (
+              <div className="flex items-center gap-1">
+                <MapPin size={12} className="text-gray-400" />
+                <span className="text-xs text-gray-400">{fabric.location}</span>
+              </div>
+            )}
           </div>
           <div className="flex items-center justify-between p-3 rounded-xl" style={{ background: C.bg }}>
             <div>
@@ -146,43 +179,49 @@ export default function FabricDetail() {
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-400">Available Stock</p>
-              <p className="text-sm" style={{ color: fabric.stock > 20 ? '#10B981' : '#F59E0B' }}>{fabric.stock} meters</p>
+              <p className="text-sm" style={{ color: fabric.stock > 20 ? '#10B981' : '#F59E0B' }}>{fabric.stock} {fabric.unit === 'm' ? 'meters' : fabric.unit}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-          <h3 className="mb-2" style={{ color: C.dark }}>Description</h3>
-          <p className="text-sm text-gray-500 leading-relaxed">{fabric.description}</p>
-        </div>
+        {fabric.description && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+            <h3 className="mb-2" style={{ color: C.dark }}>Description</h3>
+            <p className="text-sm text-gray-500 leading-relaxed">{fabric.description}</p>
+          </div>
+        )}
 
-        <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-          <h3 className="mb-3" style={{ color: C.dark }}>Available Colors</h3>
-          <div className="flex flex-wrap gap-2">
-            {fabric.colors.map(c => (
-              <button
-                key={c}
-                onClick={() => setSelectedColor(c)}
-                className="px-3 py-1.5 rounded-full text-xs border-2 transition-all"
-                style={{
-                  borderColor: selectedColor === c ? C.primary : '#E5E7EB',
-                  background: selectedColor === c ? '#FDF5F2' : 'white',
-                  color: selectedColor === c ? C.primary : '#6B7280',
-                }}
-              >
-                {c}
-              </button>
+        {fabric.colors.length > 0 && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
+            <h3 className="mb-3" style={{ color: C.dark }}>Available Colors</h3>
+            <div className="flex flex-wrap gap-2">
+              {fabric.colors.map(c => (
+                <button
+                  key={c}
+                  onClick={() => setSelectedColor(c)}
+                  className="px-3 py-1.5 rounded-full text-xs border-2 transition-all"
+                  style={{
+                    borderColor: selectedColor === c ? C.primary : '#E5E7EB',
+                    background: selectedColor === c ? '#FDF5F2' : 'white',
+                    color: selectedColor === c ? C.primary : '#6B7280',
+                  }}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {fabric.tags.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-6">
+            {fabric.tags.map(tag => (
+              <span key={tag} className="px-3 py-1 rounded-full text-xs" style={{ background: '#E8F8F6', color: C.teal }}>
+                {tag}
+              </span>
             ))}
           </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2 mb-6">
-          {fabric.tags.map(tag => (
-            <span key={tag} className="px-3 py-1 rounded-full text-xs" style={{ background: '#E8F8F6', color: C.teal }}>
-              {tag}
-            </span>
-          ))}
-        </div>
+        )}
 
         <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
           <div className="flex items-center justify-between">
@@ -193,14 +232,16 @@ export default function FabricDetail() {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                className="w-9 h-9 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
+                disabled={fabric.stock <= 0}
+                className="w-9 h-9 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors disabled:opacity-40"
               >
                 <Minus size={14} style={{ color: C.dark }} />
               </button>
               <span className="text-lg w-8 text-center" style={{ color: C.dark }}>{quantity}</span>
               <button
                 onClick={() => setQuantity(q => Math.min(fabric.stock, q + 1))}
-                className="w-9 h-9 rounded-xl flex items-center justify-center text-white transition-opacity hover:opacity-90"
+                disabled={fabric.stock <= 0}
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-white transition-opacity hover:opacity-90 disabled:opacity-40"
                 style={{ background: C.primary }}
               >
                 <Plus size={14} />
@@ -209,12 +250,25 @@ export default function FabricDetail() {
           </div>
         </div>
 
+        {fabric.sellerId && (
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => navigate(`/customer/messages?to=${fabric.sellerId}&name=${encodeURIComponent(fabric.seller)}&role=seller`)}
+              className="flex items-center gap-2 px-4 py-3 rounded-xl border border-gray-200 text-sm transition-colors hover:bg-gray-50"
+              style={{ color: C.dark }}
+            >
+              <MessageSquare size={16} /> Message Seller
+            </button>
+          </div>
+        )}
+
         <button
           onClick={() => setPaymentOpen(true)}
-          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white text-sm hover:opacity-90 transition-opacity mb-20"
+          disabled={fabric.stock <= 0}
+          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white text-sm hover:opacity-90 transition-opacity mb-20 disabled:opacity-50"
           style={{ background: C.primary }}
         >
-          <ShoppingCart size={16} /> Order Now — ₱{total.toLocaleString()}
+          <ShoppingCart size={16} /> {fabric.stock > 0 ? `Order Now — ₱${total.toLocaleString()}` : 'Out of Stock'}
         </button>
       </div>
 

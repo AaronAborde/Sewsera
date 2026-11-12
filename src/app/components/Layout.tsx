@@ -1,8 +1,9 @@
 import { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { Bell, User, Scissors } from 'lucide-react';
+import { User, Scissors } from 'lucide-react';
 import { SideNav } from './SideNav';
 import { BottomNav } from './BottomNav';
+import { NotificationsBell } from './NotificationsBell';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { useApp } from '../context/AppContext';
 
@@ -18,7 +19,7 @@ export function Layout({ children, title, showHeader = true }: LayoutProps) {
   const { currentUser, userRole } = useApp();
   const navigate = useNavigate();
 
-  const profilePath = userRole ? `/${userRole}/profile` : '/';
+  const profilePath = userRole === 'seller' ? '/seller/shop' : userRole ? `/${userRole}/profile` : '/';
 
   return (
     <div className="flex min-h-screen" style={{ background: C.bg, fontFamily: "'Inter', sans-serif" }}>
@@ -39,10 +40,7 @@ export function Layout({ children, title, showHeader = true }: LayoutProps) {
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <button className="relative p-2 rounded-full hover:bg-gray-100 transition-colors">
-                  <Bell size={18} style={{ color: C.dark }} />
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full" style={{ background: C.primary }} />
-                </button>
+                <NotificationsBell />
                 <button onClick={() => navigate(profilePath)} className="w-8 h-8 rounded-full" aria-label="Open profile">
                   <Avatar className="w-8 h-8">
                     {currentUser?.avatarUrl && <AvatarImage src={currentUser.avatarUrl} alt="" />}
@@ -63,10 +61,7 @@ export function Layout({ children, title, showHeader = true }: LayoutProps) {
               <h1 className="text-lg" style={{ color: C.dark }}>{title || 'Dashboard'}</h1>
             </div>
             <div className="flex items-center gap-3">
-              <button className="relative p-2 rounded-full hover:bg-gray-100 transition-colors">
-                <Bell size={18} style={{ color: C.dark }} />
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full" style={{ background: C.primary }} />
-              </button>
+              <NotificationsBell />
               <button onClick={() => navigate(profilePath)} className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:bg-gray-50 transition-colors">
                 <Avatar className="w-8 h-8">
                   {currentUser?.avatarUrl && <AvatarImage src={currentUser.avatarUrl} alt="" />}

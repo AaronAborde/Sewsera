@@ -10,19 +10,24 @@ const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', bg: '#F5F0E8' 
 
 interface Appointment {
   id: string;
-  date: number; // day of month
+  date: string | number; // 'YYYY-MM-DD' for new appointments, day-of-month for legacy docs
   time: string;
   client: string;
   service: string;
   color: string;
+  createdAt?: any;
 }
 
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-const MONTH_DAYS = Array.from({ length: 30 }, (_, i) => i + 1);
+
+const toKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export default function Schedule() {
   const { currentUser } = useApp();
-  const [selectedDay, setSelectedDay] = useState(21);
+  const today = new Date();
+  const [viewMonth, setViewMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
+  const [selectedDate, setSelectedDate] = useState(() => new Date(today.getFullYear(), today.getMonth(), today.getDate()));
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -52,11 +57,11 @@ export default function Schedule() {
     try {
       const docRef = await addDoc(collection(db, 'appointments'), {
         tailorId: currentUser?.uid,
-        date: selectedDay,
+        date: toKey(selectedDate),
         ...newAppt,
         createdAt: new Date(),
       });
-      setAppointments(prev => [...prev, { id: docRef.id, date: selectedDay, ...newAppt }]);
+      setAppointments(prev => [...prev, { id: docRef.id, date: toKey(selectedDate), ...newAppt }]);
       setNewAppt({ time: '', client: '', service: '', color: C.primary });
       setShowModal(false);
     } catch (error) {
@@ -75,8 +80,27 @@ export default function Schedule() {
     }
   };
 
-  const daySchedule = appointments.filter(a => a.date === selectedDay);
-  const hasEvents = (day: number) => appointments.some(a => a.date === day);
+  const monthStart = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
+  const daysInMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 0).getDate();
+  const leadingBlanks = monthStart.getDay();
+  const todayKey = toKey(today);
+  const selectedKey = toKey(selectedDate);
+
+  // Legacy appointments only store a day number; anchor them to their creation month.
+  const apptKey = (a: Appointment) => {
+    if (typeof a.date === 'string') return a.date;
+    const created = a.createdAt?.toDate ? a.createdAt.toDate() : viewMonth;
+    return toKey(new Date(created.getFullYear(), created.getMonth(), a.date));
+  };
+  const eventKeys = new Set(appointments.map(apptKey));
+  const daySchedule = appointments.filter(a => apptKey(a) === selectedKey);
+
+  const shiftMonth = (delta: number) => {
+    const next = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + delta, 1);
+    const day = Math.min(selectedDate.getDate(), new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate());
+    setViewMonth(next);
+    setSelectedDate(new Date(next.getFullYear(), next.getMonth(), day));
+  };
 
   if (loading) {
     return (
@@ -95,13 +119,13 @@ export default function Schedule() {
         {/* Calendar */}
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-5">
           <div className="flex items-center justify-between p-4 border-b border-gray-50">
-            <button className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+            <button onClick={() => shiftMonth(-1)} aria-label="Previous month" className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
               <ChevronLeft size={18} style={{ color: C.dark }} />
             </button>
             <div className="text-center">
-              <p className="text-sm" style={{ color: C.dark }}>April 2026</p>
+              <p className="text-sm" style={{ color: C.dark }}>{viewMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
             </div>
-            <button className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+            <button onClick={() => shiftMonth(1)} aria-label="Next month" className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
               <ChevronRight size={18} style={{ color: C.dark }} />
             </button>
           </div>
@@ -112,15 +136,16 @@ export default function Schedule() {
               ))}
             </div>
             <div className="grid grid-cols-7 gap-1">
-              {[...Array(3)].map((_, i) => <div key={`empty-${i}`} />)}
-              {MONTH_DAYS.map(d => {
-                const hasEvent = hasEvents(d);
-                const isSelected = d === selectedDay;
-                const isToday = d === 19;
+              {[...Array(leadingBlanks)].map((_, i) => <div key={`empty-${i}`} />)}
+              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => {
+                const dateKey = toKey(new Date(viewMonth.getFullYear(), viewMonth.getMonth(), d));
+                const hasEvent = eventKeys.has(dateKey);
+                const isSelected = dateKey === selectedKey;
+                const isToday = dateKey === todayKey;
                 return (
                   <button
                     key={d}
-                    onClick={() => setSelectedDay(d)}
+                    onClick={() => setSelectedDate(new Date(viewMonth.getFullYear(), viewMonth.getMonth(), d))}
                     className="relative flex flex-col items-center py-1.5 rounded-xl transition-all text-xs"
                     style={{
                       background: isSelected ? C.primary : isToday ? '#FDF5F2' : 'transparent',
@@ -145,7 +170,7 @@ export default function Schedule() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 style={{ color: C.dark }}>April {selectedDay}, 2026</h3>
+              <h3 style={{ color: C.dark }}>{selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</h3>
               <p className="text-xs text-gray-400">{daySchedule.length} appointment{daySchedule.length !== 1 ? 's' : ''}</p>
             </div>
             <button
@@ -195,7 +220,10 @@ export default function Schedule() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl max-w-md w-full p-6">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg" style={{ color: C.dark }}>Add Appointment</h3>
+                <div>
+                  <h3 className="text-lg" style={{ color: C.dark }}>Add Appointment</h3>
+                  <p className="text-xs text-gray-400">{selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                </div>
                 <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
                   <X size={20} />
                 </button>

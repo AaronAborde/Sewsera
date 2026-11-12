@@ -9,6 +9,16 @@ Filipino tailoring marketplace — React 18 + Vite + Tailwind CSS v4 + Firebase 
 - `npm run build` outputs to `dist/` (Firebase Hosting public dir).
 - Firebase client config lives in `src/app/firebase.ts` (project `sewsera`).
 
+## Signup email verification (OTP)
+
+- Email/password signups must enter a 6-digit code emailed to them before entering the app; page is `/auth/verify-otp`.
+- Delivery uses EmailJS (free tier) from the browser; no backend or Cloud Functions.
+- Setup: copy `.env.example` to `.env.local` and fill `VITE_EMAILJS_SERVICE_ID`, `VITE_EMAILJS_TEMPLATE_ID`, and `VITE_EMAILJS_PUBLIC_KEY` from the EmailJS dashboard (add an email service and a template).
+- The EmailJS template must include `{{otp_code}}`, `{{to_email}}`, `{{to_name}}`, and `{{app_name}}`, with "To email" set to `{{to_email}}`.
+- The code is stored SHA-256-hashed in `emailOtps/{uid}` with a 10-minute expiry and a 5-attempt limit; a successful check sets `users/{uid}.emailVerified = true`.
+- Without the three keys the verify page shows a setup warning and new signups cannot finish verification. Accounts created before this feature (no `emailVerified` field) are treated as verified.
+- Vendors still see the pending-approval screen at signup and verify on their first login after admin approval.
+
 ## Roles
 
 - customer → `/customer`, tailor → `/tailor`, seller → `/seller`, admin → `/admin`.

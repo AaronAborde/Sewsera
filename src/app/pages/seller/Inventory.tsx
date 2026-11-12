@@ -6,7 +6,7 @@ import { useApp } from '../../context/AppContext';
 import { db } from '../../firebase';
 import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 
-const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', bg: '#F5F0E8' };
+const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F' };
 
 const STATUS_CONFIG = {
   in_stock: { label: 'In Stock', color: '#10B981', bg: '#ECFDF5', icon: <CheckCircle size={12} /> },
@@ -17,7 +17,6 @@ const STATUS_CONFIG = {
 interface InventoryItem {
   id: string;
   name: string;
-  sku: string;
   category: string;
   stock: number;
   price: number;
@@ -32,7 +31,7 @@ export default function Inventory() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editStock, setEditStock] = useState<number>(0);
   const [showModal, setShowModal] = useState(false);
-  const [newProduct, setNewProduct] = useState({ name: '', sku: '', category: '', stock: 0, price: 0, unit: 'm' });
+  const [newProduct, setNewProduct] = useState({ category: '', name: '', stock: 0, price: 0, unit: 'm' });
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
@@ -53,7 +52,7 @@ export default function Inventory() {
   }, [currentUser]);
 
   const addProduct = async () => {
-    if (!newProduct.name || !newProduct.sku || !newProduct.category || newProduct.stock < 0 || newProduct.price <= 0) return;
+    if (!newProduct.name || !newProduct.category || newProduct.stock < 0 || newProduct.price <= 0) return;
     setAdding(true);
     try {
       const status = newProduct.stock === 0 ? 'out_of_stock' : newProduct.stock < 15 ? 'low_stock' : 'in_stock';
@@ -64,7 +63,7 @@ export default function Inventory() {
         createdAt: new Date(),
       });
       setItems(prev => [...prev, { id: docRef.id, ...newProduct, status }]);
-      setNewProduct({ name: '', sku: '', category: '', stock: 0, price: 0, unit: 'm' });
+      setNewProduct({ category: '', name: '', stock: 0, price: 0, unit: 'm' });
       setShowModal(false);
     } catch (error) {
       console.error("Error adding product:", error);
@@ -147,7 +146,7 @@ export default function Inventory() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-50">
-                {['Product', 'SKU', 'Category', 'Stock', 'Price', 'Status', ''].map(h => (
+                {['Category', 'Product', 'Stock', 'Price', 'Status', ''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs text-gray-400">{h}</th>
                 ))}
               </tr>
@@ -157,9 +156,8 @@ export default function Inventory() {
                 const cfg = STATUS_CONFIG[item.status];
                 return (
                   <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                    <td className="px-4 py-3 text-sm" style={{ color: C.dark }}>{item.name}</td>
-                    <td className="px-4 py-3 text-xs text-gray-400">{item.sku}</td>
                     <td className="px-4 py-3 text-xs text-gray-500">{item.category}</td>
+                    <td className="px-4 py-3 text-sm" style={{ color: C.dark }}>{item.name}</td>
                     <td className="px-4 py-3">
                       {editId === item.id ? (
                         <div className="flex items-center gap-1">
@@ -203,7 +201,7 @@ export default function Inventory() {
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <p className="text-sm" style={{ color: C.dark }}>{item.name}</p>
-                    <p className="text-xs text-gray-400">{item.sku} · {item.category}</p>
+                    <p className="text-xs text-gray-400">{item.category}</p>
                   </div>
                   <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full" style={{ background: cfg.bg, color: cfg.color }}>
                     {cfg.icon} {cfg.label}
@@ -254,23 +252,16 @@ export default function Inventory() {
               </div>
               <input
                 type="text"
-                placeholder="Product Name"
-                value={newProduct.name}
-                onChange={e => setNewProduct({ ...newProduct, name: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 mb-3 text-sm"
-              />
-              <input
-                type="text"
-                placeholder="SKU (e.g., FAB-001)"
-                value={newProduct.sku}
-                onChange={e => setNewProduct({ ...newProduct, sku: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 mb-3 text-sm"
-              />
-              <input
-                type="text"
                 placeholder="Category (e.g., Cotton, Silk)"
                 value={newProduct.category}
                 onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 mb-3 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Product Name"
+                value={newProduct.name}
+                onChange={e => setNewProduct({ ...newProduct, name: e.target.value })}
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 mb-3 text-sm"
               />
               <input
@@ -289,7 +280,7 @@ export default function Inventory() {
               />
               <button
                 onClick={addProduct}
-                disabled={adding || !newProduct.name || !newProduct.sku || !newProduct.category || newProduct.price <= 0}
+                disabled={adding || !newProduct.name || !newProduct.category || newProduct.price <= 0}
                 className="w-full py-3 rounded-xl text-white text-sm disabled:opacity-50"
                 style={{ background: C.primary }}
               >

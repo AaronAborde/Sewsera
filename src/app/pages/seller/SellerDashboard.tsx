@@ -6,9 +6,9 @@ import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'rec
 import { Layout } from '../../components/Layout';
 import { useApp } from '../../context/AppContext';
 import { db } from '../../firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 
-const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', gold: '#C89558', bg: '#F5F0E8' };
+const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F' };
 
 const STATUS_CONFIG = {
   pending: { label: 'Pending', color: '#F59E0B', bg: '#FFFBEB' },
@@ -17,13 +17,14 @@ const STATUS_CONFIG = {
   delivered: { label: 'Delivered', color: '#10B981', bg: '#ECFDF5' },
 };
 
-interface Order {
+interface FabricOrder {
   id: string;
-  product: string;
-  customer: string;
-  quantity: number;
-  total: number;
-  status: string;
+  fabricName?: string;
+  customerName?: string;
+  quantity?: number;
+  total?: number;
+  status?: string;
+  createdAt?: Timestamp;
 }
 
 interface InventoryItem {
@@ -33,50 +34,59 @@ interface InventoryItem {
   status: string;
 }
 
-// Monthly sales data (can be computed from orders or stored separately)
-const SALES_DATA = [
-  { month: 'Jan', sales: 42000 },
-  { month: 'Feb', sales: 38000 },
-  { month: 'Mar', sales: 51000 },
-  { month: 'Apr', sales: 47000 },
-  { month: 'May', sales: 62000 },
-  { month: 'Jun', sales: 58000 },
-];
+const monthKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}`;
 
 export default function SellerDashboard() {
   const navigate = useNavigate();
   const { currentUser } = useApp();
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<FabricOrder[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const totalSales = SALES_DATA.reduce((s, d) => s + d.sales, 0);
-  const lowStock = inventory.filter(i => i.status === 'low_stock').length;
-  const pendingOrders = orders.filter(o => o.status === 'pending').length;
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!currentUser?.uid) return;
     const fetchSellerData = async () => {
       try {
-        // Fetch orders for this seller
-        const ordersQuery = query(collection(db, 'orders'), where('sellerId', '==', currentUser.uid));
-        const ordersSnap = await getDocs(ordersQuery);
-        const ordersList = ordersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
-        setOrders(ordersList);
-
-        // Fetch inventory for this seller
-        const inventoryQuery = query(collection(db, 'inventory'), where('sellerId', '==', currentUser.uid));
-        const inventorySnap = await getDocs(inventoryQuery);
-        const inventoryList = inventorySnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as InventoryItem));
-        setInventory(inventoryList);
-      } catch (error) {
-        console.error("Error fetching seller data:", error);
+        const [ordersSnap, inventorySnap] = await Promise.all([
+          getDocs(query(collection(db, 'fabricOrders'), where('sellerId', '==', currentUser.uid))),
+          getDocs(query(collection(db, 'inventory'), where('sellerId', '==', currentUser.uid))),
+        ]);
+        setOrders(ordersSnap.docs.map(d => ({ id: d.id, ...d.data() } as FabricOrder)));
+        setInventory(inventorySnap.docs.map(d => ({ id: d.id, ...d.data() } as InventoryItem)));
+      } catch (e) {
+        console.error('Error fetching seller data:', e);
+        setError('Could not load your dashboard data. Please refresh.');
       } finally {
         setLoading(false);
       }
     };
     fetchSellerData();
   }, [currentUser]);
+
+  const sorted = [...orders].sort(
+    (a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)
+  );
+  const totalSales = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  const lowStock = inventory.filter(i => i.status === 'low_stock').length;
+  const pendingOrders = orders.filter(o => o.status === 'pending').length;
+
+  // Last six months of real order revenue.
+  const monthly = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - (5 - i));
+    return { month: d.toLocaleString('en', { month: 'short' }), key: monthKey(d), sales: 0 };
+  });
+  orders.forEach(o => {
+    const date = o.createdAt?.toDate?.();
+    if (!date) return;
+    const bucket = monthly.find(m => m.key === monthKey(date));
+    if (bucket) bucket.sales += Number(o.total) || 0;
+  });
+  const thisMonth = monthly[5]?.sales || 0;
+  const lastMonth = monthly[4]?.sales || 0;
+  const growth = lastMonth > 0 ? Math.round(((thisMonth - lastMonth) / lastMonth) * 100) : null;
 
   if (loading) {
     return (
@@ -91,13 +101,15 @@ export default function SellerDashboard() {
   return (
     <Layout title="Dashboard">
       <div className="max-w-2xl mx-auto md:max-w-4xl px-4 md:px-8 py-5">
-        {/* Welcome */}
         <div className="mb-5">
           <p className="text-sm text-gray-500">Good day,</p>
           <h2 className="text-xl" style={{ color: C.dark }}>Welcome, {currentUser?.name?.split(' ')[0]}!</h2>
         </div>
 
-        {/* Alert */}
+        {error && (
+          <div className="bg-red-50 border border-red-100 rounded-2xl p-3.5 mb-5 text-xs text-red-600">{error}</div>
+        )}
+
         {(lowStock > 0 || pendingOrders > 0) && (
           <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-3.5 mb-5">
             <AlertTriangle size={16} className="text-amber-500 flex-shrink-0" />
@@ -108,11 +120,10 @@ export default function SellerDashboard() {
           </div>
         )}
 
-        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           {[
             { label: 'Total Revenue', value: `₱${totalSales.toLocaleString()}`, icon: <TrendingUp size={18} />, color: C.primary, bg: '#FDF5F2' },
-            { label: 'Total Orders', value: orders.length, icon: <ShoppingBag size={18} />, color: C.teal, bg: '#E8F8F6' },
+            { label: 'Orders', value: orders.length, icon: <ShoppingBag size={18} />, color: C.teal, bg: '#E8F8F6' },
             { label: 'Products', value: inventory.length, icon: <Package size={18} />, color: C.dark, bg: '#F5F0E8' },
             { label: 'Low Stock', value: lowStock, icon: <AlertTriangle size={18} />, color: '#F59E0B', bg: '#FFFBEB' },
           ].map(s => (
@@ -126,19 +137,23 @@ export default function SellerDashboard() {
           ))}
         </div>
 
-        {/* Sales Chart */}
         <div className="bg-white rounded-2xl shadow-sm p-5 mb-5">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 style={{ color: C.dark }}>Revenue Overview</h3>
-              <p className="text-xs text-gray-400 mt-0.5">₱{totalSales.toLocaleString()} total this year</p>
+              <p className="text-xs text-gray-400 mt-0.5">Last 6 months · ₱{totalSales.toLocaleString()} total</p>
             </div>
-            <div className="px-2 py-1 rounded-lg bg-green-50 text-green-600 text-xs flex items-center gap-1">
-              <TrendingUp size={11} /> +18%
-            </div>
+            {growth !== null && (
+              <div
+                className="px-2 py-1 rounded-lg text-xs flex items-center gap-1"
+                style={{ background: growth >= 0 ? '#ECFDF5' : '#FEF2F2', color: growth >= 0 ? '#10B981' : '#EF4444' }}
+              >
+                <TrendingUp size={11} /> {growth >= 0 ? '+' : ''}{growth}%
+              </div>
+            )}
           </div>
           <ResponsiveContainer width="100%" height={160}>
-            <AreaChart data={SALES_DATA}>
+            <AreaChart data={monthly}>
               <defs>
                 <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={C.primary} stopOpacity={0.15} />
@@ -156,7 +171,6 @@ export default function SellerDashboard() {
           </ResponsiveContainer>
         </div>
 
-        {/* Recent Orders */}
         <div>
           <div className="flex items-center justify-between mb-4">
             <h3 style={{ color: C.dark }}>Recent Orders</h3>
@@ -164,25 +178,33 @@ export default function SellerDashboard() {
               View All <ChevronRight size={14} />
             </button>
           </div>
-          <div className="space-y-3">
-            {orders.slice(0, 3).map(o => {
-              const cfg = STATUS_CONFIG[o.status as keyof typeof STATUS_CONFIG];
-              return (
-                <div key={o.id} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <p className="text-sm truncate" style={{ color: C.dark }}>{o.product}</p>
-                      <span className="flex-shrink-0 text-xs px-2 py-0.5 rounded-full" style={{ background: cfg.bg, color: cfg.color }}>
-                        {cfg.label}
-                      </span>
+          {sorted.length === 0 ? (
+            <div className="bg-white rounded-2xl p-6 text-center text-sm text-gray-400 shadow-sm">
+              No orders yet. Orders from customers will appear here.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {sorted.slice(0, 3).map(o => {
+                const cfg = STATUS_CONFIG[o.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.pending;
+                return (
+                  <div key={o.id} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <p className="text-sm truncate" style={{ color: C.dark }}>{o.fabricName || 'Fabric order'}</p>
+                        <span className="flex-shrink-0 text-xs px-2 py-0.5 rounded-full" style={{ background: cfg.bg, color: cfg.color }}>
+                          {cfg.label}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400">
+                        {o.customerName || 'Customer'} · {o.quantity ?? 0}m
+                      </p>
+                      <p className="text-xs mt-1" style={{ color: C.primary }}>₱{(Number(o.total) || 0).toLocaleString()}</p>
                     </div>
-                    <p className="text-xs text-gray-400">{o.customer} · {o.quantity}</p>
-                    <p className="text-xs mt-1" style={{ color: C.primary }}>₱{o.total.toLocaleString()}</p>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </Layout>
