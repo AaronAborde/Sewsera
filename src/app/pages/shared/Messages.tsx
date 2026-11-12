@@ -43,6 +43,24 @@ const formatTime = (timestamp?: Timestamp) => {
 
 const initial = (name: string) => (name.trim()[0] || '?').toUpperCase();
 
+const isImageUrl = (value: string) => /^(https?:\/\/|data:image\/)/.test(value);
+
+function Avatar({ value, name, role, size }: { value: string; name: string; role: string; size: string }) {
+  const background = role === 'tailor' ? C.primary : role === 'seller' ? C.teal : C.dark;
+  return (
+    <div
+      className={`${size} rounded-full flex items-center justify-center text-white text-sm overflow-hidden flex-shrink-0`}
+      style={{ background }}
+    >
+      {isImageUrl(value) ? (
+        <img src={value} alt="" className="w-full h-full object-cover" />
+      ) : (
+        value || initial(name)
+      )}
+    </div>
+  );
+}
+
 export default function Messages() {
   const { currentUser } = useApp();
   const [searchParams] = useSearchParams();
@@ -101,7 +119,7 @@ export default function Messages() {
       {
         participants: [currentUser.uid, toId].sort(),
         participantNames: { [currentUser.uid]: meName, [toId]: otherName },
-        participantAvatars: { [currentUser.uid]: initial(meName), [toId]: initial(otherName) },
+        participantAvatars: { [currentUser.uid]: currentUser.avatarUrl || initial(meName), [toId]: initial(otherName) },
         participantRoles: { [currentUser.uid]: currentUser.role, [toId]: toRole || 'customer' },
         lastMessage: '',
         lastMessageTime: Timestamp.now(),
@@ -213,12 +231,7 @@ export default function Messages() {
                   style={{ background: selected?.id === conv.id ? '#FDF5F2' : undefined }}
                 >
                   <div className="relative flex-shrink-0">
-                    <div
-                      className="w-11 h-11 rounded-full flex items-center justify-center text-white text-sm"
-                      style={{ background: other.role === 'tailor' ? C.primary : other.role === 'seller' ? C.teal : C.dark }}
-                    >
-                      {other.avatar}
-                    </div>
+                    <Avatar value={other.avatar} name={other.name} role={other.role} size="w-11 h-11" />
                     {unread > 0 && (
                       <div
                         className="absolute -top-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs"
@@ -271,12 +284,7 @@ export default function Messages() {
                 if (!other) return null;
                 return (
                   <>
-                    <div
-                      className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm"
-                      style={{ background: other.role === 'tailor' ? C.primary : other.role === 'seller' ? C.teal : C.dark }}
-                    >
-                      {other.avatar}
-                    </div>
+                    <Avatar value={other.avatar} name={other.name} role={other.role} size="w-9 h-9" />
                     <div>
                       <p className="text-sm" style={{ color: C.dark }}>{other.name}</p>
                       <p className="text-xs text-gray-400">
