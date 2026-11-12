@@ -21,6 +21,7 @@ interface Job {
   service: string;
   client: string;
   amount: number;
+  netEarnings?: number;
   status: string;
   progress: number;
   deadline: string;
@@ -56,9 +57,10 @@ export default function TailorDashboard() {
 
   const activeJobs = jobs.filter(j => j.status !== 'completed').length;
   const completedJobs = jobs.filter(j => j.status === 'completed').length;
+  // Payout after the platform commission; older jobs only have the gross amount.
   const earnings = jobs
     .filter(j => j.status === 'completed')
-    .reduce((sum, j) => sum + (Number(j.amount) || 0), 0);
+    .reduce((sum, j) => sum + (Number(j.netEarnings ?? j.amount) || 0), 0);
 
   const breakdown = [
     { status: 'Pending', count: jobs.filter(j => j.status === 'pending').length },
