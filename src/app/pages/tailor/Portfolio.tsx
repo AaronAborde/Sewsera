@@ -4,7 +4,7 @@ import { Plus, Trash2, Image, X } from 'lucide-react';
 import { Layout } from '../../components/Layout';
 import { useApp } from '../../context/AppContext';
 import { db } from '../../firebase';
-import { collection, query, where, getDocs, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, addDoc, deleteDoc, doc } from 'firebase/firestore';
 
 const C = { primary: '#C4623F', dark: '#1A2B3C', teal: '#2A9D8F', bg: '#F5F0E8' };
 
@@ -17,6 +17,8 @@ interface PortfolioItem {
 export default function Portfolio() {
   const { currentUser } = useApp();
   const [items, setItems] = useState<PortfolioItem[]>([]);
+  const [rating, setRating] = useState(0);
+  const [completedJobs, setCompletedJobs] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [newUrl, setNewUrl] = useState('');
@@ -27,10 +29,14 @@ export default function Portfolio() {
     if (!currentUser?.uid) return;
     const fetchPortfolio = async () => {
       try {
-        const q = query(collection(db, 'portfolio'), where('tailorId', '==', currentUser.uid));
-        const snapshot = await getDocs(q);
-        const portfolioList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PortfolioItem));
-        setItems(portfolioList);
+        const [portfolioSnap, tailorSnap, bookingsSnap] = await Promise.all([
+          getDocs(query(collection(db, 'portfolio'), where('tailorId', '==', currentUser.uid))),
+          getDoc(doc(db, 'tailors', currentUser.uid)),
+          getDocs(query(collection(db, 'bookings'), where('tailorId', '==', currentUser.uid))),
+        ]);
+        setItems(portfolioSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PortfolioItem)));
+        setRating(Number(tailorSnap.data()?.rating) || 0);
+        setCompletedJobs(bookingsSnap.docs.filter(d => d.data().status === 'completed').length);
       } catch (error) {
         console.error("Error fetching portfolio:", error);
       } finally {
@@ -88,7 +94,7 @@ export default function Portfolio() {
         <div className="flex items-center justify-between mb-5">
           <div>
             <h2 className="text-xl" style={{ color: C.dark }}>My Portfolio</h2>
-            <p className="text-xs text-gray-400">{items.length} works displayed</p>
+            <p className="text-xs text-gray-400">{items.length} work{items.length === 1 ? '' : 's'} displayed</p>
           </div>
           <button
             onClick={() => setShowModal(true)}
@@ -103,8 +109,8 @@ export default function Portfolio() {
         <div className="grid grid-cols-3 gap-3 mb-6">
           {[
             { label: 'Portfolio Items', value: items.length },
-            { label: 'Profile Views', value: '324' },
-            { label: 'Avg. Rating', value: '4.9' },
+            { label: 'Completed Jobs', value: completedJobs },
+            { label: 'Avg. Rating', value: rating > 0 ? `${rating.toFixed(1)}★` : '—' },
           ].map(s => (
             <div key={s.label} className="bg-white rounded-2xl p-3 shadow-sm text-center">
               <p className="text-xl" style={{ color: C.dark }}>{s.value}</p>
